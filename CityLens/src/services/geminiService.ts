@@ -1,4 +1,4 @@
-import { fetchSpatialContext, summarizeSpatialContext } from './spatialContext';
+import { generateBuildings } from '../utils/buildingGenerator';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -123,43 +123,31 @@ CRITICAL RULES:
   // Determine which zone this query targets so we can fetch spatial data
   let targetZone = 'uptown';
   const q = query.toLowerCase();
-  if (q.includes('university') || q.includes('density near ion')) targetZone = 'university';
-  else if (q.includes('midtown') || q.includes('water')) targetZone = 'midtown';
+  if (q.includes('university') || q.includes('campus') || q.includes('density near ion')) targetZone = 'university';
+  else if (q.includes('midtown') || q.includes('hospital')) targetZone = 'midtown';
   else if (q.includes('downtown') || q.includes('kitchener')) targetZone = 'downtown_kitchener';
-  else if (q.includes('northfield')) targetZone = 'northfield';
+  else if (q.includes('northfield') || q.includes('mall') || q.includes('conestoga')) targetZone = 'northfield';
   
   const zoneCenter = ZONES[targetZone as keyof typeof ZONES];
-
-  // Fetch real-world spatial context from OpenStreetMap Overpass API
-  let spatialInfo = '';
-  try {
-    const ctx = await fetchSpatialContext(zoneCenter.lng, zoneCenter.lat, 300);
-    spatialInfo = '\n\n' + summarizeSpatialContext(ctx, zoneCenter.lng, zoneCenter.lat);
-  } catch (e) {
-    console.warn('Could not fetch spatial context:', e);
-  }
-
-  const fullPrompt = systemPrompt + spatialInfo;
 
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
     console.warn("No Gemini API key found. Using mock data. Set VITE_GEMINI_API_KEY in .env");
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const mocked = { ...fallbackResult };
-        mocked.zone = targetZone;
-        if (targetZone === 'university') {
-          mocked.narrative = "Adding high density around University stations significantly boosts transit viability, though parking minimums will need careful review.";
-        } else if (targetZone === 'midtown') {
-          mocked.narrative = "Midtown intensification is heavily impacted by the water moratorium. Any 6+ storey additions will be frozen until infrastructure expands.";
-        } else if (targetZone === 'northfield') {
-          mocked.narrative = "Densifying the Northfield corridor transforms retail surface parking into mixed-use communities, taking advantage of the mall terminal.";
-        }
-        mocked.zoneCenter = zoneCenter;
-        resolve(mocked);
-      }, 1500);
-    });
+    const mocked = { ...fallbackResult };
+    mocked.zone = targetZone;
+    if (targetZone === 'university') {
+      mocked.narrative = "Adding high density around University stations significantly boosts transit viability, though parking minimums will need careful review.";
+    } else if (targetZone === 'midtown') {
+      mocked.narrative = "Midtown intensification is heavily impacted by the water moratorium. Any 6+ storey additions will be frozen until infrastructure expands.";
+    } else if (targetZone === 'northfield') {
+      mocked.narrative = "Densifying the Northfield corridor transforms retail surface parking into mixed-use communities, taking advantage of the mall terminal.";
+    }
+    mocked.zoneCenter = zoneCenter;
+    // Generate buildings from OSM data (or fallback coordinates)
+    const buildings = await generateBuildings(zoneCenter, targetZone, mocked.proposedHeight);
+    mocked.buildingFootprints = buildings;
+    return mocked;
   }
 
   try {
@@ -167,7 +155,7 @@ CRITICAL RULES:
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: { text: fullPrompt } },
+        system_instruction: { parts: { text: systemPrompt } },
         contents: [{ role: 'user', parts: [{ text: query }] }],
         generationConfig: {
             temperature: 0.2,
@@ -182,7 +170,7 @@ CRITICAL RULES:
 
     const data = await response.json();
     const textResponse = data.candidates[0].content.parts[0].text;
-    
+
     let cleanJson = textResponse;
     if (cleanJson.startsWith('```json')) {
       cleanJson = cleanJson.replace(/```json\n?/, '').replace(/```\n?$/, '');
@@ -190,11 +178,19 @@ CRITICAL RULES:
 
     const result = JSON.parse(cleanJson) as SimulationResult;
     result.zoneCenter = ZONES[result.zone as keyof typeof ZONES] || ZONES["uptown"];
+
+    // Override Gemini's building footprints with programmatically generated ones
+    const buildings = await generateBuildings(result.zoneCenter, result.zone, result.proposedHeight);
+    result.buildingFootprints = buildings;
+
     return result;
   } catch (error) {
     console.error("Gemini Parse Error:", error);
     const fallback = { ...fallbackResult };
     fallback.zoneCenter = ZONES["uptown"];
+    // Generate buildings for fallback too
+    const buildings = await generateBuildings(fallback.zoneCenter!, fallback.zone, fallback.proposedHeight);
+    fallback.buildingFootprints = buildings;
     return fallback;
   }
 }

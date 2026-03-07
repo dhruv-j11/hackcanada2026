@@ -6,6 +6,13 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+  // Bypass auth when no Auth0 credentials are configured (local dev)
+  const hasAuth0Config = import.meta.env.VITE_AUTH0_DOMAIN && import.meta.env.VITE_AUTH0_CLIENT_ID;
+
+  if (!hasAuth0Config) {
+    return <>{children}</>;
+  }
+
   const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
 
   if (isLoading) {
