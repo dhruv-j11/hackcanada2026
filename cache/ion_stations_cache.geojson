@@ -1,0 +1,25 @@
+{
+"type": "FeatureCollection",
+"name": "ion_stations_cache",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "STATION_NAME": "Conestoga" }, "geometry": { "type": "Point", "coordinates": [ -80.5292, 43.4985 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Northfield" }, "geometry": { "type": "Point", "coordinates": [ -80.5264, 43.4949 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Research and Technology" }, "geometry": { "type": "Point", "coordinates": [ -80.5259, 43.4929 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "University of Waterloo" }, "geometry": { "type": "Point", "coordinates": [ -80.5414, 43.4736 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Laurier/Waterloo Park" }, "geometry": { "type": "Point", "coordinates": [ -80.528, 43.4672 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Waterloo Public Square" }, "geometry": { "type": "Point", "coordinates": [ -80.5223, 43.4637 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Willis Way" }, "geometry": { "type": "Point", "coordinates": [ -80.5197, 43.4617 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Allen" }, "geometry": { "type": "Point", "coordinates": [ -80.5157, 43.4576 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Grand River Hospital" }, "geometry": { "type": "Point", "coordinates": [ -80.512, 43.4534 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Central Station" }, "geometry": { "type": "Point", "coordinates": [ -80.4987, 43.4502 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Victoria Park" }, "geometry": { "type": "Point", "coordinates": [ -80.4923, 43.4481 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Kitchener City Hall" }, "geometry": { "type": "Point", "coordinates": [ -80.4884, 43.4516 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Frederick" }, "geometry": { "type": "Point", "coordinates": [ -80.4746, 43.45 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Queen" }, "geometry": { "type": "Point", "coordinates": [ -80.4657, 43.4478 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Borden" }, "geometry": { "type": "Point", "coordinates": [ -80.4558, 43.4463 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Mill" }, "geometry": { "type": "Point", "coordinates": [ -80.4346, 43.4396 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Block Line" }, "geometry": { "type": "Point", "coordinates": [ -80.4319, 43.4282 ] } },
+{ "type": "Feature", "properties": { "STATION_NAME": "Fairway" }, "geometry": { "type": "Point", "coordinates": [ -80.4302, 43.4172 ] } }
+]
+}

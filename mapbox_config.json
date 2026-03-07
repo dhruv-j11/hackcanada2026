@@ -1,0 +1,125 @@
+{
+  "_comment": "Mapbox GL JS layer configuration for ZoneWise parcel scoring heatmap. Copy these into your React/Mapbox setup.",
+
+  "source": {
+    "id": "parcel-scores",
+    "type": "geojson",
+    "config": {
+      "type": "geojson",
+      "data": "http://localhost:8000/parcels/scores"
+    }
+  },
+
+  "layers": [
+    {
+      "_comment": "Fill-extrusion layer: parcels colored and extruded by score",
+      "id": "parcel-scores-3d",
+      "type": "fill-extrusion",
+      "source": "parcel-scores",
+      "paint": {
+        "fill-extrusion-color": [
+          "interpolate",
+          ["linear"],
+          ["get", "score"],
+          0, "#9e9e9e",
+          30, "#bdbdbd",
+          31, "#fff176",
+          60, "#fdd835",
+          61, "#ffb74d",
+          80, "#f57c00",
+          81, "#ef5350",
+          100, "#c62828"
+        ],
+        "fill-extrusion-height": [
+          "interpolate",
+          ["linear"],
+          ["get", "score"],
+          0, 5,
+          50, 25,
+          100, 80
+        ],
+        "fill-extrusion-base": 0,
+        "fill-extrusion-opacity": 0.85
+      }
+    },
+    {
+      "_comment": "Flat fill layer (alternative to 3D, for 2D map views)",
+      "id": "parcel-scores-flat",
+      "type": "fill",
+      "source": "parcel-scores",
+      "layout": {
+        "visibility": "none"
+      },
+      "paint": {
+        "fill-color": [
+          "interpolate",
+          ["linear"],
+          ["get", "score"],
+          0, "#9e9e9e",
+          30, "#bdbdbd",
+          31, "#fff176",
+          60, "#fdd835",
+          61, "#ffb74d",
+          80, "#f57c00",
+          81, "#ef5350",
+          100, "#c62828"
+        ],
+        "fill-opacity": 0.7,
+        "fill-outline-color": "#333333"
+      }
+    },
+    {
+      "_comment": "Outline layer for parcel boundaries",
+      "id": "parcel-outlines",
+      "type": "line",
+      "source": "parcel-scores",
+      "paint": {
+        "line-color": "#333333",
+        "line-width": 0.5,
+        "line-opacity": 0.4
+      }
+    },
+    {
+      "_comment": "Score label layer (visible at high zoom)",
+      "id": "parcel-score-labels",
+      "type": "symbol",
+      "source": "parcel-scores",
+      "minzoom": 16,
+      "layout": {
+        "text-field": ["concat", ["to-string", ["get", "score"]], "/100"],
+        "text-size": 11,
+        "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+        "text-anchor": "center"
+      },
+      "paint": {
+        "text-color": "#ffffff",
+        "text-halo-color": "#000000",
+        "text-halo-width": 1.5
+      }
+    }
+  ],
+
+  "legend": {
+    "title": "Development Opportunity Score",
+    "items": [
+      { "color": "#9e9e9e", "label": "0–30: Low Opportunity" },
+      { "color": "#fdd835", "label": "31–60: Moderate Opportunity" },
+      { "color": "#f57c00", "label": "61–80: High Opportunity" },
+      { "color": "#c62828", "label": "81–100: Prime Opportunity" }
+    ]
+  },
+
+  "react_example": {
+    "_comment": "Example React/Mapbox GL JS integration code — see below",
+    "code": "// In your React component:\n// 1. On map load, fetch scores and add source:\nmap.on('load', async () => {\n  const bbox = map.getBounds().toArray().flat().join(',');\n  const resp = await fetch(`/parcels/scores?bbox=${bbox}`);\n  const geojson = await resp.json();\n\n  map.addSource('parcel-scores', { type: 'geojson', data: geojson });\n\n  // Add the layers from mapbox_config.json\n  map.addLayer({ /* parcel-scores-3d config */ });\n  map.addLayer({ /* parcel-outlines config */ });\n  map.addLayer({ /* parcel-score-labels config */ });\n});\n\n// 2. On map move, re-fetch for new viewport:\nmap.on('moveend', async () => {\n  const bbox = map.getBounds().toArray().flat().join(',');\n  const resp = await fetch(`/parcels/scores?bbox=${bbox}`);\n  const geojson = await resp.json();\n  map.getSource('parcel-scores').setData(geojson);\n});\n\n// 3. On parcel click, fetch explanation:\nmap.on('click', 'parcel-scores-3d', async (e) => {\n  const parcelId = e.features[0].properties.parcel_id;\n  const resp = await fetch(`/parcels/${parcelId}/explain`);\n  const explanation = await resp.json();\n  // Display in sidebar component\n  setSidebarContent(explanation);\n});"
+  },
+
+  "initial_view": {
+    "_comment": "Center on Waterloo, Ontario with a slight pitch for 3D effect",
+    "center": [-80.5204, 43.4643],
+    "zoom": 14,
+    "pitch": 45,
+    "bearing": -15,
+    "style": "mapbox://styles/mapbox/dark-v11"
+  }
+}
