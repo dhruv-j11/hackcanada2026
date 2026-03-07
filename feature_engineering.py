@@ -1,19 +1,18 @@
 """
-feature_engineering.py — Build the 10-feature matrix from raw GeoJSON data.
+feature_engineering.py — Build the 9-feature matrix from raw GeoJSON data.
 
 Takes the GeoDataFrames produced by data_ingest.py and engineers the features
-specified in the ZoneWise scoring spec:
+specified in the CityLens scoring spec:
 
   1. distance_to_nearest_ion_station (metres)
   2. current_zoning_density_class (categorical)
   3. lot_area_sqm
   4. current_vs_permitted_far_ratio (0-1)
-  5. is_within_water_capacity_freeze_zone (binary)
-  6. proximity_to_major_road (metres)
-  7. proximity_to_park_or_green_space (metres)
-  8. current_building_age (years)
-  9. current_use_vs_zoned_use_mismatch (binary)
-  10. walkability_proxy (amenity density within 800m)
+  5. proximity_to_major_road (metres)
+  6. proximity_to_park_or_green_space (metres)
+  7. current_building_age (years)
+  8. current_use_vs_zoned_use_mismatch (binary)
+  9. walkability_proxy (amenity density within 800m)
 
 Usage:
     from data_ingest import fetch_all
@@ -90,16 +89,7 @@ MAX_FAR_BY_DENSITY = {
     "mixed_use": 4.0,
 }
 
-# Known water capacity freeze zone — approximate polygon for the areas under
-# the Region's water/wastewater capacity moratorium.
-# Update with actual geometry if available from the Region's open data.
-# This is a rough bounding box for the affected area in west Waterloo.
-WATER_FREEZE_ZONE_BBOX = {
-    "min_lon": -80.58,
-    "max_lon": -80.54,
-    "min_lat": 43.44,
-    "max_lat": 43.48,
-}
+
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +198,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 1: distance_to_nearest_ion_station (metres)
     # ------------------------------------------------------------------
-    print("  [1/10] Distance to nearest ION station...")
+    print("  [1/9] Distance to nearest ION station...")
     parcels_proj = _compute_nearest_distance_fast(
         parcels_proj, ion_proj, "distance_to_nearest_ion_station"
     )
@@ -216,7 +206,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 2: current_zoning_density_class (categorical)
     # ------------------------------------------------------------------
-    print("  [2/10] Zoning density class...")
+    print("  [2/9] Zoning density class...")
     if zoning_proj is not None and len(zoning_proj) > 0:
         # Spatial join: find which zone each parcel falls in
         # Use the parcel centroid for the join
@@ -254,7 +244,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 3: lot_area_sqm
     # ------------------------------------------------------------------
-    print("  [3/10] Lot area (sqm)...")
+    print("  [3/9] Lot area (sqm)...")
     # Try to use an existing area column, otherwise compute from geometry
     area_col = None
     for candidate in ["PROPAREA", "AREA", "AREA_SQM", "LOT_AREA", "Shape__Area",
@@ -276,7 +266,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 4: current_vs_permitted_far_ratio (0 = fully built, 1 = unused)
     # ------------------------------------------------------------------
-    print("  [4/10] Current vs permitted FAR ratio...")
+    print("  [4/9] Current vs permitted FAR ratio...")
     # Get max permitted FAR based on zoning density class
     parcels_proj["max_permitted_far"] = (
         parcels_proj["current_zoning_density_class"]
@@ -319,24 +309,12 @@ def engineer_features(
         parcels_proj["current_vs_permitted_far_ratio"].clip(0, 1)
     )
 
-    # ------------------------------------------------------------------
-    # Feature 5: is_within_water_capacity_freeze_zone (binary)
-    # ------------------------------------------------------------------
-    print("  [5/10] Water capacity freeze zone check...")
-    # Convert parcel centroids back to WGS84 for bbox check
-    centroids_wgs84 = parcels_proj.geometry.representative_point().to_crs(epsg=4326)
-    bbox = WATER_FREEZE_ZONE_BBOX
-    parcels_proj["is_within_water_capacity_freeze_zone"] = (
-        (centroids_wgs84.x >= bbox["min_lon"]) &
-        (centroids_wgs84.x <= bbox["max_lon"]) &
-        (centroids_wgs84.y >= bbox["min_lat"]) &
-        (centroids_wgs84.y <= bbox["max_lat"])
-    ).astype(int)
+
 
     # ------------------------------------------------------------------
     # Feature 6: proximity_to_major_road (metres)
     # ------------------------------------------------------------------
-    print("  [6/10] Proximity to major road...")
+    print("  [5/9] Proximity to major road...")
     if roads_proj is not None:
         # Filter to major roads using classification columns
         # Real data has: CARTO_CLASS (e.g., "Major Collector", "Minor Collector",
@@ -381,7 +359,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 7: proximity_to_park_or_green_space (metres)
     # ------------------------------------------------------------------
-    print("  [7/10] Proximity to park/green space...")
+    print("  [6/9] Proximity to park/green space...")
     if parks_proj is not None and len(parks_proj) > 0:
         # We have the real Parks layer — use it directly
         print(f"    Using {len(parks_proj)} park polygons from Parks layer")
@@ -413,7 +391,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 8: current_building_age (years)
     # ------------------------------------------------------------------
-    print("  [8/10] Building age...")
+    print("  [7/9] Building age...")
     parcels_proj["current_building_age"] = np.nan
 
     # Source 1: Heritage buildings have CONST_DATE (e.g., "1896", "pre1855-66")
@@ -476,7 +454,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 9: current_use_vs_zoned_use_mismatch (binary)
     # ------------------------------------------------------------------
-    print("  [9/10] Use mismatch detection...")
+    print("  [8/9] Use mismatch detection...")
     # Compare actual permit type against zoned density class
     # A single-family home in a mixed-use zone = mismatch (underutilized)
     if permits_proj is not None and "SUBDESC" in permits_proj.columns:
@@ -512,7 +490,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 10: walkability_proxy (amenity density within 800m)
     # ------------------------------------------------------------------
-    print("  [10/10] Walkability proxy...")
+    print("  [9/9] Walkability proxy...")
     # Best source: PointsOfInterest layer (schools, shops, services, etc.)
     # Fallback: count non-residential permits within 800m
     amenity_source = None
@@ -556,7 +534,6 @@ def engineer_features(
         "current_zoning_density_class",
         "lot_area_sqm",
         "current_vs_permitted_far_ratio",
-        "is_within_water_capacity_freeze_zone",
         "proximity_to_major_road",
         "proximity_to_park_or_green_space",
         "current_building_age",
@@ -584,7 +561,7 @@ if __name__ == "__main__":
     feature_cols = [
         "distance_to_nearest_ion_station", "current_zoning_density_class",
         "lot_area_sqm", "current_vs_permitted_far_ratio",
-        "is_within_water_capacity_freeze_zone", "proximity_to_major_road",
+        "proximity_to_major_road",
         "proximity_to_park_or_green_space", "current_building_age",
         "current_use_vs_zoned_use_mismatch", "walkability_proxy",
     ]

@@ -32,16 +32,188 @@ except ImportError:
 # ---------------------------------------------------------------------------
 SCORING_MODE = "weighted_sum"  # "weighted_sum" | "xgboost"
 
-# Default feature weights for weighted-sum mode
+# Default feature weights for weighted-sum mode (used when no category specified)
 DEFAULT_WEIGHTS = {
-    "distance_to_nearest_ion_station": 0.25,  # inverted: closer = higher
-    "current_vs_permitted_far_ratio": 0.20,   # higher unused = higher score
-    "lot_area_sqm": 0.15,                     # larger = higher
-    "not_in_water_freeze": 0.15,              # not in freeze = higher
+    "distance_to_nearest_ion_station": 0.30,  # inverted: closer = higher
+    "current_vs_permitted_far_ratio": 0.25,   # higher unused = higher score
+    "lot_area_sqm": 0.20,                     # larger = higher
     "current_building_age": 0.10,             # older = higher
     "current_use_vs_zoned_use_mismatch": 0.10, # mismatch = higher
     "walkability_proxy": 0.05,                 # more walkable = higher
 }
+
+# ---------------------------------------------------------------------------
+# Category-Specific Weight Profiles
+# ---------------------------------------------------------------------------
+# Each category has:
+#   - weights: scoring weights tuned for that development type
+#   - description: what this category represents (for LLM classification)
+#   - keywords: terms an LLM can match against in user prompts
+#   - examples: sample user prompts that should map to this category
+#
+# The LLM should classify a user's prompt into one of these categories,
+# then the corresponding weights are applied for scoring.
+# ---------------------------------------------------------------------------
+CATEGORY_WEIGHT_PROFILES = {
+    "residential": {
+        "weights": {
+            "distance_to_nearest_ion_station": 0.30,
+            "current_vs_permitted_far_ratio": 0.15,
+            "lot_area_sqm": 0.10,
+            "current_building_age": 0.10,
+            "current_use_vs_zoned_use_mismatch": 0.10,
+            "walkability_proxy": 0.25,
+        },
+        "description": (
+            "Residential development: apartments, condos, townhouses, "
+            "single-family homes, student housing, seniors housing. "
+            "Prioritizes walkability and transit access because residents "
+            "need daily access to amenities, schools, and commute routes."
+        ),
+        "keywords": [
+            "residential", "housing", "apartment", "condo", "townhouse",
+            "dwelling", "home", "student housing", "seniors", "family",
+            "live", "neighborhood", "subdivision",
+        ],
+        "examples": [
+            "Where should I build a new apartment building?",
+            "Find the best lots for residential development",
+            "I want to build student housing near the university",
+        ],
+    },
+    "commercial": {
+        "weights": {
+            "distance_to_nearest_ion_station": 0.15,
+            "current_vs_permitted_far_ratio": 0.20,
+            "lot_area_sqm": 0.30,
+            "current_building_age": 0.10,
+            "current_use_vs_zoned_use_mismatch": 0.15,
+            "walkability_proxy": 0.10,
+        },
+        "description": (
+            "Commercial development: retail stores, shopping centres, "
+            "offices, restaurants, hotels, entertainment venues. "
+            "Prioritizes lot size and road visibility for customer access "
+            "and sufficient floor area for commercial operations."
+        ),
+        "keywords": [
+            "commercial", "retail", "store", "shop", "office", "restaurant",
+            "hotel", "mall", "plaza", "business", "storefront", "food",
+        ],
+        "examples": [
+            "Where is the best location for a new shopping plaza?",
+            "Find parcels suitable for office development",
+            "I want to open a restaurant somewhere accessible",
+        ],
+    },
+    "industrial": {
+        "weights": {
+            "distance_to_nearest_ion_station": 0.05,
+            "current_vs_permitted_far_ratio": 0.25,
+            "lot_area_sqm": 0.35,
+            "current_building_age": 0.15,
+            "current_use_vs_zoned_use_mismatch": 0.15,
+            "walkability_proxy": 0.05,
+        },
+        "description": (
+            "Industrial development: warehouses, manufacturing, logistics, "
+            "distribution centres, workshops, tech manufacturing. "
+            "Prioritizes large lot area and available density for heavy "
+            "operations. Transit and walkability are less important."
+        ),
+        "keywords": [
+            "industrial", "warehouse", "manufacturing", "factory", "logistics",
+            "distribution", "workshop", "production", "storage", "yard",
+        ],
+        "examples": [
+            "Where can I build a warehouse or distribution centre?",
+            "Find large industrial lots for manufacturing",
+            "Best sites for a logistics hub near Waterloo",
+        ],
+    },
+    "mixed_use": {
+        "weights": {
+            "distance_to_nearest_ion_station": 0.25,
+            "current_vs_permitted_far_ratio": 0.25,
+            "lot_area_sqm": 0.15,
+            "current_building_age": 0.10,
+            "current_use_vs_zoned_use_mismatch": 0.10,
+            "walkability_proxy": 0.15,
+        },
+        "description": (
+            "Mixed-use development: buildings combining residential, "
+            "commercial, and/or office uses. Ground-floor retail with "
+            "apartments above, live-work spaces, urban villages. "
+            "Balances transit access, walkability, and available density."
+        ),
+        "keywords": [
+            "mixed use", "mixed-use", "live-work", "urban village",
+            "ground floor retail", "multi-use", "combined", "hybrid",
+        ],
+        "examples": [
+            "Where should I build a mixed-use development?",
+            "Find parcels for a building with retail and apartments",
+            "Best locations for live-work spaces near transit",
+        ],
+    },
+    "institutional": {
+        "weights": {
+            "distance_to_nearest_ion_station": 0.25,
+            "current_vs_permitted_far_ratio": 0.15,
+            "lot_area_sqm": 0.20,
+            "current_building_age": 0.05,
+            "current_use_vs_zoned_use_mismatch": 0.05,
+            "walkability_proxy": 0.30,
+        },
+        "description": (
+            "Institutional development: schools, libraries, community centres, "
+            "healthcare facilities, places of worship, government buildings. "
+            "Prioritizes walkability and transit so the public can easily "
+            "access these services. Lot size matters for parking and grounds."
+        ),
+        "keywords": [
+            "institutional", "school", "library", "community centre",
+            "hospital", "clinic", "healthcare", "church", "government",
+            "public", "daycare", "recreation",
+        ],
+        "examples": [
+            "Where should a new community centre be built?",
+            "Find locations for a public library",
+            "Best sites for a new school or daycare",
+        ],
+    },
+}
+
+
+def get_weights_for_category(category: str) -> dict:
+    """
+    Return the weight profile for a given category.
+    Falls back to DEFAULT_WEIGHTS if category is not recognized.
+    """
+    profile = CATEGORY_WEIGHT_PROFILES.get(category.lower().replace("-", "_"))
+    if profile:
+        return profile["weights"]
+    return dict(DEFAULT_WEIGHTS)
+
+
+def get_category_definitions_for_llm() -> str:
+    """
+    Return a formatted string of all category definitions that can be
+    injected into an LLM prompt for classification.
+
+    The LLM should respond with exactly one of the category keys.
+    """
+    lines = [
+        "Classify the user's prompt into exactly ONE of the following "
+        "development categories. Respond with only the category key.\n"
+    ]
+    for key, profile in CATEGORY_WEIGHT_PROFILES.items():
+        keywords = ", ".join(profile["keywords"][:8])
+        lines.append(f"  {key}: {profile['description']}")
+        lines.append(f"    Keywords: {keywords}")
+        lines.append(f"    Example: \"{profile['examples'][0]}\"")
+        lines.append("")
+    return "\n".join(lines)
 
 # Score tier boundaries
 TIERS = [
@@ -124,16 +296,8 @@ def score_weighted_sum(
     else:
         contributions["lot_area"] = 0
 
-    # Feature 4: Not in water freeze zone
-    if "is_within_water_capacity_freeze_zone" in result.columns:
-        contributions["not_in_freeze"] = (
-            (1 - result["is_within_water_capacity_freeze_zone"])
-            * w["not_in_water_freeze"]
-        )
-    else:
-        contributions["not_in_freeze"] = w["not_in_water_freeze"]
 
-    # Feature 5: Building age (older = more redevelopment opportunity)
+    # Feature 4: Building age (older = more redevelopment opportunity)
     if "current_building_age" in result.columns:
         contributions["building_age"] = (
             result["current_building_age"]
@@ -142,7 +306,7 @@ def score_weighted_sum(
     else:
         contributions["building_age"] = 0
 
-    # Feature 6: Use mismatch (mismatch = opportunity)
+    # Feature 5: Use mismatch (mismatch = opportunity)
     if "current_use_vs_zoned_use_mismatch" in result.columns:
         contributions["use_mismatch"] = (
             result["current_use_vs_zoned_use_mismatch"]
@@ -151,7 +315,7 @@ def score_weighted_sum(
     else:
         contributions["use_mismatch"] = 0
 
-    # Feature 7: Walkability proxy (more walkable = better)
+    # Feature 6: Walkability proxy (more walkable = better)
     if "walkability_proxy" in result.columns:
         contributions["walkability"] = (
             result["walkability_proxy"]
@@ -200,7 +364,7 @@ def train_xgboost(
 
     feature_cols = [c for c in NUMERIC_FEATURES if c in gdf.columns]
     # Add binary features
-    for col in ["is_within_water_capacity_freeze_zone", "current_use_vs_zoned_use_mismatch"]:
+    for col in ["current_use_vs_zoned_use_mismatch"]:
         if col in gdf.columns:
             feature_cols.append(col)
 
@@ -247,7 +411,7 @@ def score_xgboost(
             )
 
     feature_cols = [c for c in NUMERIC_FEATURES if c in gdf.columns]
-    for col in ["is_within_water_capacity_freeze_zone", "current_use_vs_zoned_use_mismatch"]:
+    for col in ["current_use_vs_zoned_use_mismatch"]:
         if col in gdf.columns:
             feature_cols.append(col)
 
@@ -339,7 +503,6 @@ def explain_parcel(scored_gdf: gpd.GeoDataFrame, parcel_idx: int) -> dict:
         "distance_to_ion": _explain_ion_distance(row),
         "unused_far": _explain_far_ratio(row),
         "lot_area": _explain_lot_area(row),
-        "not_in_freeze": _explain_water_freeze(row),
         "building_age": _explain_building_age(row),
         "use_mismatch": _explain_use_mismatch(row),
         "walkability": _explain_walkability(row),
@@ -389,11 +552,6 @@ def _explain_lot_area(row) -> str:
     return "the lot size supports development"
 
 
-def _explain_water_freeze(row) -> str:
-    in_freeze = row.get("is_within_water_capacity_freeze_zone", 0)
-    if in_freeze:
-        return "however, it is in the water capacity freeze zone (penalty applied)"
-    return "it is outside the water capacity freeze zone"
 
 
 def _explain_building_age(row) -> str:

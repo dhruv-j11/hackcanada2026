@@ -330,27 +330,19 @@ def example_llm_integration():
 
     # This is what your actual LLM call would look like:
     """
-    import anthropic
+    import google.generativeai as genai
 
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        system="You are ZoneWise, an urban planning assistant for Waterloo, Ontario. "
-               "Use the provided building permit data to answer questions about "
-               "development activity in specific areas.",
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Here is building permit data near the location the user asked about:\\n"
-                    f"{permit_context}\\n\\n"
-                    f"User question: What's being developed near Waterloo Town Square?"
-                ),
-            }
-        ],
+    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    response = model.generate_content(
+        f"You are CityLens, an urban planning assistant for Waterloo, Ontario. "
+        f"Use the provided building permit data to answer questions about "
+        f"development activity in specific areas.\n\n"
+        f"Here is building permit data near the location the user asked about:\n"
+        f"{permit_context}\n\n"
+        f"User question: What's being developed near Waterloo Town Square?"
     )
-    print(response.content[0].text)
+    print(response.text)
     """
 
 

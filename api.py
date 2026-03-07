@@ -1,5 +1,5 @@
 """
-api.py — FastAPI backend for ZoneWise Parcel Opportunity Scorer
+api.py — FastAPI backend for CityLens Parcel Opportunity Scorer
 
 Endpoints:
   GET  /parcels/scores          → GeoJSON FeatureCollection with scores (bbox filtering)
@@ -32,9 +32,11 @@ from feature_engineering import engineer_features
 from scorer import (
     score_parcels, explain_parcel as _explain_parcel,
     scored_gdf_to_geojson, DEFAULT_WEIGHTS,
+    CATEGORY_WEIGHT_PROFILES, get_weights_for_category,
+    get_category_definitions_for_llm,
 )
 
-logger = logging.getLogger("zonewise")
+logger = logging.getLogger("citylens")
 
 # ---------------------------------------------------------------------------
 # In-memory data store (loaded once at startup, rescored on demand)
@@ -75,8 +77,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ZoneWise API",
-    version="0.2.0",
+    title="CityLens API",
+    version="0.3.0",
     description="Parcel Opportunity Scorer for Waterloo, Ontario",
     lifespan=lifespan,
 )
@@ -103,16 +105,24 @@ class PermitQueryRequest(BaseModel):
 
 class RescoreRequest(BaseModel):
     """Custom weights for rescoring. All values should sum to ~1.0."""
-    distance_to_nearest_ion_station: float = Field(0.25, alias="distance_to_ion")
-    current_vs_permitted_far_ratio: float = Field(0.20, alias="unused_far_ratio")
-    lot_area_sqm: float = Field(0.15, alias="lot_area")
-    not_in_water_freeze: float = Field(0.15)
+    distance_to_nearest_ion_station: float = Field(0.30, alias="distance_to_ion")
+    current_vs_permitted_far_ratio: float = Field(0.25, alias="unused_far_ratio")
+    lot_area_sqm: float = Field(0.20, alias="lot_area")
     current_building_age: float = Field(0.10)
     current_use_vs_zoned_use_mismatch: float = Field(0.10, alias="use_mismatch")
     walkability_proxy: float = Field(0.05)
 
     class Config:
         populate_by_name = True
+
+
+class RescoreByCategoryRequest(BaseModel):
+    """Rescore using a predefined category weight profile."""
+    category: str = Field(
+        ...,
+        description="Development category: residential, commercial, industrial, mixed_use, institutional",
+        examples=["residential", "commercial"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +262,6 @@ def rescore_parcels(req: RescoreRequest):
         "distance_to_nearest_ion_station": req.distance_to_nearest_ion_station,
         "current_vs_permitted_far_ratio": req.current_vs_permitted_far_ratio,
         "lot_area_sqm": req.lot_area_sqm,
-        "not_in_water_freeze": req.not_in_water_freeze,
         "current_building_age": req.current_building_age,
         "current_use_vs_zoned_use_mismatch": req.current_use_vs_zoned_use_mismatch,
         "walkability_proxy": req.walkability_proxy,
@@ -283,6 +292,83 @@ def rescore_parcels(req: RescoreRequest):
             "max": round(rescored["score"].max(), 1),
         },
         "tier_breakdown": tier_counts,
+    }
+
+
+@app.post("/parcels/rescore-by-category")
+def rescore_by_category(req: RescoreByCategoryRequest):
+    """
+    Re-score all parcels using a predefined category weight profile.
+
+    Available categories: residential, commercial, industrial, mixed_use, institutional.
+    Each category emphasizes different factors (e.g. residential prioritizes
+    walkability and transit; industrial prioritizes lot size).
+
+    The LLM classifies the user's prompt into a category, then calls this
+    endpoint to rescore with the appropriate weights.
+    """
+    _require_data()
+
+    category = req.category.lower().replace("-", "_")
+    if category not in CATEGORY_WEIGHT_PROFILES:
+        raise HTTPException(
+            400,
+            f"Unknown category '{req.category}'. "
+            f"Available: {list(CATEGORY_WEIGHT_PROFILES.keys())}",
+        )
+
+    profile = CATEGORY_WEIGHT_PROFILES[category]
+    new_weights = profile["weights"]
+
+    datasets = fetch_all()  # uses cache
+    feature_gdf = engineer_features(datasets)
+    rescored = score_parcels(feature_gdf, mode="weighted_sum", weights=new_weights)
+    geojson = scored_gdf_to_geojson(rescored)
+
+    _state["scored_gdf"] = rescored
+    _state["scored_geojson"] = geojson
+    _state["current_weights"] = new_weights
+
+    tier_counts = rescored["tier"].value_counts().to_dict()
+
+    return {
+        "message": f"Rescored all parcels for '{category}' development.",
+        "category": category,
+        "category_description": profile["description"],
+        "weights_applied": new_weights,
+        "parcel_count": len(rescored),
+        "score_summary": {
+            "mean": round(rescored["score"].mean(), 1),
+            "median": round(rescored["score"].median(), 1),
+            "min": round(rescored["score"].min(), 1),
+            "max": round(rescored["score"].max(), 1),
+        },
+        "tier_breakdown": tier_counts,
+    }
+
+
+@app.get("/parcels/categories")
+def list_categories():
+    """
+    Returns all available development categories with their weight profiles,
+    descriptions, keywords, and example prompts.
+
+    Use this to:
+    - Populate a category selector in the UI
+    - Inject into an LLM prompt for automatic classification
+    """
+    categories = {}
+    for key, profile in CATEGORY_WEIGHT_PROFILES.items():
+        categories[key] = {
+            "description": profile["description"],
+            "keywords": profile["keywords"],
+            "examples": profile["examples"],
+            "weights": profile["weights"],
+        }
+
+    return {
+        "categories": categories,
+        "llm_classification_prompt": get_category_definitions_for_llm(),
     }
 
 
@@ -334,32 +420,24 @@ def ask_about_permits(req: PermitQueryRequest):
         token_budget=req.token_budget,
     )
 
-    # TODO: Wire up your LLM API key here:
+    # TODO: Wire up your Gemini API key here:
     #
-    # import anthropic
-    # client = anthropic.Anthropic()
-    # response = client.messages.create(
-    #     model="claude-sonnet-4-20250514",
-    #     max_tokens=1024,
-    #     system=(
-    #         "You are ZoneWise, an AI urban planning assistant for Waterloo, Ontario. "
-    #         "Answer questions about development activity using the provided building "
-    #         "permit data. Be specific — cite permit numbers, addresses, and values."
-    #     ),
-    #     messages=[{
-    #         "role": "user",
-    #         "content": (
-    #             f"Building permits near ({req.latitude}, {req.longitude}):\n"
-    #             f"{permit_context}\n\n"
-    #             f"Question: {req.question}"
-    #         ),
-    #     }],
+    # import google.generativeai as genai
+    # genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    # model = genai.GenerativeModel("gemini-2.0-flash")
+    # response = model.generate_content(
+    #     f"You are CityLens, an AI urban planning assistant for Waterloo, Ontario. "
+    #     f"Answer questions about development activity using the provided building "
+    #     f"permit data. Be specific — cite permit numbers, addresses, and values.\n\n"
+    #     f"Building permits near ({req.latitude}, {req.longitude}):\n"
+    #     f"{permit_context}\n\n"
+    #     f"Question: {req.question}"
     # )
-    # answer = response.content[0].text
+    # answer = response.text
 
     answer = (
         f"[LLM placeholder] Found {permit_context.count('#')} permits "
-        f"within {req.radius_m}m. Wire up your Anthropic API key to get real answers."
+        f"within {req.radius_m}m. Wire up your GEMINI_API_KEY to get real answers."
     )
 
     return {
