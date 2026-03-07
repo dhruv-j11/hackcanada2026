@@ -1,3 +1,4 @@
+
 export default function HowItWorks() {
   const steps = [
     { num: 1, title: "Ask", desc: "Describe any zoning change in plain English or speak it aloud" },
