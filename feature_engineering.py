@@ -1,19 +1,18 @@
 """
-feature_engineering.py — Build the 10-feature matrix from raw GeoJSON data.
+feature_engineering.py — Build the 9-feature matrix from raw GeoJSON data.
 
 Takes the GeoDataFrames produced by data_ingest.py and engineers the features
-specified in the ZoneWise scoring spec:
+specified in the CityLens scoring spec:
 
   1. distance_to_nearest_ion_station (metres)
   2. current_zoning_density_class (categorical)
   3. lot_area_sqm
   4. current_vs_permitted_far_ratio (0-1)
-  5. is_within_water_capacity_freeze_zone (binary)
-  6. proximity_to_major_road (metres)
-  7. proximity_to_park_or_green_space (metres)
-  8. current_building_age (years)
-  9. current_use_vs_zoned_use_mismatch (binary)
-  10. walkability_proxy (amenity density within 800m)
+  5. proximity_to_major_road (metres)
+  6. proximity_to_park_or_green_space (metres)
+  7. current_building_age (years)
+  8. current_use_vs_zoned_use_mismatch (binary)
+  9. walkability_proxy (amenity density within 800m)
 
 Usage:
     from data_ingest import fetch_all
@@ -90,16 +89,7 @@ MAX_FAR_BY_DENSITY = {
     "mixed_use": 4.0,
 }
 
-# Known water capacity freeze zone — approximate polygon for the areas under
-# the Region's water/wastewater capacity moratorium.
-# Update with actual geometry if available from the Region's open data.
-# This is a rough bounding box for the affected area in west Waterloo.
-WATER_FREEZE_ZONE_BBOX = {
-    "min_lon": -80.58,
-    "max_lon": -80.54,
-    "min_lat": 43.44,
-    "max_lat": 43.48,
-}
+
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +198,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 1: distance_to_nearest_ion_station (metres)
     # ------------------------------------------------------------------
-    print("  [1/10] Distance to nearest ION station...")
+    print("  [1/9] Distance to nearest ION station...")
     parcels_proj = _compute_nearest_distance_fast(
         parcels_proj, ion_proj, "distance_to_nearest_ion_station"
     )
@@ -216,7 +206,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 2: current_zoning_density_class (categorical)
     # ------------------------------------------------------------------
-    print("  [2/10] Zoning density class...")
+    print("  [2/9] Zoning density class...")
     if zoning_proj is not None and len(zoning_proj) > 0:
         # Spatial join: find which zone each parcel falls in
         # Use the parcel centroid for the join
@@ -254,7 +244,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 3: lot_area_sqm
     # ------------------------------------------------------------------
-    print("  [3/10] Lot area (sqm)...")
+    print("  [3/9] Lot area (sqm)...")
     # Try to use an existing area column, otherwise compute from geometry
     area_col = None
     for candidate in ["PROPAREA", "AREA", "AREA_SQM", "LOT_AREA", "Shape__Area",
@@ -276,7 +266,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 4: current_vs_permitted_far_ratio (0 = fully built, 1 = unused)
     # ------------------------------------------------------------------
-    print("  [4/10] Current vs permitted FAR ratio...")
+    print("  [4/9] Current vs permitted FAR ratio...")
     # Get max permitted FAR based on zoning density class
     parcels_proj["max_permitted_far"] = (
         parcels_proj["current_zoning_density_class"]
@@ -319,24 +309,12 @@ def engineer_features(
         parcels_proj["current_vs_permitted_far_ratio"].clip(0, 1)
     )
 
-    # ------------------------------------------------------------------
-    # Feature 5: is_within_water_capacity_freeze_zone (binary)
-    # ------------------------------------------------------------------
-    print("  [5/10] Water capacity freeze zone check...")
-    # Convert parcel centroids back to WGS84 for bbox check
-    centroids_wgs84 = parcels_proj.geometry.representative_point().to_crs(epsg=4326)
-    bbox = WATER_FREEZE_ZONE_BBOX
-    parcels_proj["is_within_water_capacity_freeze_zone"] = (
-        (centroids_wgs84.x >= bbox["min_lon"]) &
-        (centroids_wgs84.x <= bbox["max_lon"]) &
-        (centroids_wgs84.y >= bbox["min_lat"]) &
-        (centroids_wgs84.y <= bbox["max_lat"])
-    ).astype(int)
+
 
     # ------------------------------------------------------------------
     # Feature 6: proximity_to_major_road (metres)
     # ------------------------------------------------------------------
-    print("  [6/10] Proximity to major road...")
+    print("  [5/9] Proximity to major road...")
     if roads_proj is not None:
         # Filter to major roads using classification columns
         # Real data has: CARTO_CLASS (e.g., "Major Collector", "Minor Collector",
@@ -381,7 +359,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 7: proximity_to_park_or_green_space (metres)
     # ------------------------------------------------------------------
-    print("  [7/10] Proximity to park/green space...")
+    print("  [6/9] Proximity to park/green space...")
     if parks_proj is not None and len(parks_proj) > 0:
         # We have the real Parks layer — use it directly
         print(f"    Using {len(parks_proj)} park polygons from Parks layer")
@@ -413,7 +391,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 8: current_building_age (years)
     # ------------------------------------------------------------------
-    print("  [8/10] Building age...")
+    print("  [7/9] Building age...")
     parcels_proj["current_building_age"] = np.nan
 
     # Source 1: Heritage buildings have CONST_DATE (e.g., "1896", "pre1855-66")
@@ -476,7 +454,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 9: current_use_vs_zoned_use_mismatch (binary)
     # ------------------------------------------------------------------
-    print("  [9/10] Use mismatch detection...")
+    print("  [8/9] Use mismatch detection...")
     # Compare actual permit type against zoned density class
     # A single-family home in a mixed-use zone = mismatch (underutilized)
     if permits_proj is not None and "SUBDESC" in permits_proj.columns:
@@ -512,7 +490,7 @@ def engineer_features(
     # ------------------------------------------------------------------
     # Feature 10: walkability_proxy (amenity density within 800m)
     # ------------------------------------------------------------------
-    print("  [10/10] Walkability proxy...")
+    print("  [9/9] Walkability proxy...")
     # Best source: PointsOfInterest layer (schools, shops, services, etc.)
     # Fallback: count non-residential permits within 800m
     amenity_source = None
@@ -545,10 +523,118 @@ def engineer_features(
     else:
         parcels_proj["walkability_proxy"] = 0
 
+
+    # NOTE: CRS conversion to WGS84 happens after ward + heritage joins below
+    # Ward Assignment (Feature 1)
     # ------------------------------------------------------------------
-    # Convert back to WGS84 for output
+    wards_gdf = datasets.get("wards")
+    if wards_gdf is not None and len(wards_gdf) > 0:
+        print("  [Ward] Assigning parcels to wards...")
+        wards_proj = wards_gdf.to_crs(epsg=32617)
+        # Use representative point for join
+        parcel_points = parcels_proj.copy()
+        parcel_points["geometry"] = parcels_proj.geometry.representative_point()
+        ward_joined = gpd.sjoin(
+            parcel_points, wards_proj[["geometry", "ward_number", "ward_name", "councillor_name"]],
+            how="left", predicate="within"
+        )
+        # Handle duplicates from overlapping ward boundaries
+        ward_joined = ward_joined[~ward_joined.index.duplicated(keep="first")]
+        parcels_proj["ward_number"] = ward_joined["ward_number"].fillna(0).astype(int)
+        parcels_proj["ward_name"] = ward_joined["ward_name"].fillna("Unknown")
+        parcels_proj["councillor_name"] = ward_joined["councillor_name"].fillna("Unknown")
+        print(f"    Ward coverage: {(parcels_proj['ward_number'] > 0).sum()}/{len(parcels_proj)} parcels assigned")
+    else:
+        parcels_proj["ward_number"] = 0
+        parcels_proj["ward_name"] = "Unknown"
+        parcels_proj["councillor_name"] = "Unknown"
+
     # ------------------------------------------------------------------
-    result = parcels_proj.to_crs(epsg=4326)
+    # Heritage Collision Detection (Feature 4)
+    # ------------------------------------------------------------------
+    heritage_gdf = datasets.get("heritage_buildings")
+    if heritage_gdf is not None and len(heritage_gdf) > 0:
+        print("  [Heritage] Detecting parcels within 50m of heritage buildings...")
+        heritage_proj = heritage_gdf.to_crs(epsg=32617)
+
+        # Find nearest heritage building for each parcel
+        parcel_points = parcels_proj.copy()
+        parcel_points["geometry"] = parcels_proj.geometry.representative_point()
+
+        heritage_nearest = gpd.sjoin_nearest(
+            parcel_points, heritage_proj,
+            how="left", distance_col="heritage_distance_m", max_distance=5000
+        )
+        heritage_nearest = heritage_nearest[~heritage_nearest.index.duplicated(keep="first")]
+
+        parcels_proj["heritage_distance_m"] = heritage_nearest["heritage_distance_m"].round(1)
+        parcels_proj["heritage_adjacent"] = (parcels_proj["heritage_distance_m"] <= 50).astype(int)
+
+        # Get name of nearest heritage building
+        name_col = None
+        for candidate in ["NAME", "name", "ADDRESS", "HERITAGE_NAME"]:
+            if candidate in heritage_proj.columns:
+                name_col = candidate
+                break
+        if name_col:
+            parcels_proj["nearest_heritage_name"] = heritage_nearest[name_col].fillna("Unknown")
+        else:
+            parcels_proj["nearest_heritage_name"] = "Unknown"
+
+        n_adj = parcels_proj["heritage_adjacent"].sum()
+        print(f"    {n_adj} parcels within 50m of a heritage building")
+    else:
+        parcels_proj["heritage_adjacent"] = 0
+        parcels_proj["nearest_heritage_name"] = ""
+        parcels_proj["heritage_distance_m"] = np.nan
+
+    # ------------------------------------------------------------------
+    # Planning District Assignment (Census Integration)
+    # ------------------------------------------------------------------
+    # Uses the DistrictPlans layer (26 polygons) to assign each parcel
+    # to a planning district. The CENDISTNAM field maps to census district
+    # names for linking with parsed census demographic data.
+    districts_gdf = datasets.get("district_plans")
+    if districts_gdf is not None and len(districts_gdf) > 0:
+        print("  [District] Assigning parcels to planning districts...")
+        districts_proj = districts_gdf.to_crs(epsg=32617)
+
+        # Keep only relevant columns
+        dist_cols = ["geometry"]
+        name_col = "DISTNAME" if "DISTNAME" in districts_proj.columns else None
+        census_col = "CENDISTNAM" if "CENDISTNAM" in districts_proj.columns else None
+        if name_col:
+            dist_cols.append(name_col)
+        if census_col:
+            dist_cols.append(census_col)
+
+        parcel_points = parcels_proj.copy()
+        parcel_points["geometry"] = parcels_proj.geometry.representative_point()
+
+        dist_joined = gpd.sjoin(
+            parcel_points, districts_proj[dist_cols],
+            how="left", predicate="within"
+        )
+        dist_joined = dist_joined[~dist_joined.index.duplicated(keep="first")]
+
+        if name_col:
+            parcels_proj["district_name"] = dist_joined[name_col].fillna("Unknown")
+        else:
+            parcels_proj["district_name"] = "Unknown"
+
+        if census_col:
+            # Clean up null-like values from ArcGIS
+            census_names = dist_joined[census_col].fillna("Unknown")
+            census_names = census_names.replace({"<Null>": "Unknown", " ": "Unknown", "": "Unknown"})
+            parcels_proj["census_district_name"] = census_names
+        else:
+            parcels_proj["census_district_name"] = parcels_proj["district_name"]
+
+        assigned = (parcels_proj["district_name"] != "Unknown").sum()
+        print(f"    District coverage: {assigned}/{len(parcels_proj)} parcels assigned")
+    else:
+        parcels_proj["district_name"] = "Unknown"
+        parcels_proj["census_district_name"] = "Unknown"
 
     # List the feature columns we engineered
     feature_cols = [
@@ -556,7 +642,6 @@ def engineer_features(
         "current_zoning_density_class",
         "lot_area_sqm",
         "current_vs_permitted_far_ratio",
-        "is_within_water_capacity_freeze_zone",
         "proximity_to_major_road",
         "proximity_to_park_or_green_space",
         "current_building_age",
@@ -564,9 +649,19 @@ def engineer_features(
         "walkability_proxy",
     ]
 
-    print(f"\nFeature engineering complete. {len(result)} parcels × {len(feature_cols)} features.")
-    print(f"Features: {feature_cols}")
+    # Additional metadata columns (not used in scoring, but exposed in API)
+    meta_cols = [
+        "ward_number", "ward_name", "councillor_name",
+        "heritage_adjacent", "nearest_heritage_name", "heritage_distance_m",
+        "district_name", "census_district_name",
+    ]
 
+    print(f"\nFeature engineering complete. {len(parcels_proj)} parcels × {len(feature_cols)} features.")
+    print(f"Features: {feature_cols}")
+    print(f"Metadata: {meta_cols}")
+
+    # Convert back to WGS84 for output
+    result = parcels_proj.to_crs(epsg=4326)
     return result
 
 
@@ -584,7 +679,7 @@ if __name__ == "__main__":
     feature_cols = [
         "distance_to_nearest_ion_station", "current_zoning_density_class",
         "lot_area_sqm", "current_vs_permitted_far_ratio",
-        "is_within_water_capacity_freeze_zone", "proximity_to_major_road",
+        "proximity_to_major_road",
         "proximity_to_park_or_green_space", "current_building_age",
         "current_use_vs_zoned_use_mismatch", "walkability_proxy",
     ]

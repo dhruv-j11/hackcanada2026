@@ -227,6 +227,89 @@ def _build_ion_fallback_gdf() -> gpd.GeoDataFrame:
     return gdf
 
 
+# ---------------------------------------------------------------------------
+# Ward Boundaries (Feature 1)
+# ---------------------------------------------------------------------------
+# Waterloo has 7 wards. These are approximate boundary polygons dividing
+# the city bounding box (lat 43.44-43.52, lon -80.59 to -80.48).
+# Councillor names as of 2026.
+WARD_DATA = [
+    {
+        "ward_number": 1, "ward_name": "South-West",
+        "councillor_name": "Sandra Hanmer",
+        "coords": [
+            (-80.59, 43.44), (-80.545, 43.44), (-80.545, 43.475),
+            (-80.59, 43.475), (-80.59, 43.44),
+        ],
+    },
+    {
+        "ward_number": 2, "ward_name": "North-West",
+        "councillor_name": "Royce Bodaly",
+        "coords": [
+            (-80.59, 43.475), (-80.545, 43.475), (-80.545, 43.52),
+            (-80.59, 43.52), (-80.59, 43.475),
+        ],
+    },
+    {
+        "ward_number": 3, "ward_name": "Lakeshore",
+        "councillor_name": "Colleen James",
+        "coords": [
+            (-80.545, 43.44), (-80.52, 43.44), (-80.52, 43.46),
+            (-80.545, 43.46), (-80.545, 43.44),
+        ],
+    },
+    {
+        "ward_number": 4, "ward_name": "North-East",
+        "councillor_name": "Diane Freeman",
+        "coords": [
+            (-80.535, 43.49), (-80.48, 43.49), (-80.48, 43.52),
+            (-80.535, 43.52), (-80.535, 43.49),
+        ],
+    },
+    {
+        "ward_number": 5, "ward_name": "South-East",
+        "councillor_name": "Jeff Henry",
+        "coords": [
+            (-80.52, 43.44), (-80.48, 43.44), (-80.48, 43.465),
+            (-80.52, 43.465), (-80.52, 43.44),
+        ],
+    },
+    {
+        "ward_number": 6, "ward_name": "Central-West",
+        "councillor_name": "Tenille Bonoguore",
+        "coords": [
+            (-80.545, 43.46), (-80.52, 43.46), (-80.52, 43.49),
+            (-80.545, 43.49), (-80.545, 43.46),
+        ],
+    },
+    {
+        "ward_number": 7, "ward_name": "Uptown/University",
+        "councillor_name": "Ayan Basu",
+        "coords": [
+            (-80.52, 43.465), (-80.48, 43.465), (-80.48, 43.49),
+            (-80.52, 43.49), (-80.52, 43.465),
+        ],
+    },
+]
+
+
+def _build_ward_boundaries_gdf() -> gpd.GeoDataFrame:
+    """Build a GeoDataFrame of Waterloo ward boundaries with councillor info."""
+    from shapely.geometry import Polygon
+
+    rows = []
+    for w in WARD_DATA:
+        rows.append({
+            "geometry": Polygon(w["coords"]),
+            "ward_number": w["ward_number"],
+            "ward_name": w["ward_name"],
+            "councillor_name": w["councillor_name"],
+        })
+    gdf = gpd.GeoDataFrame(rows, crs="EPSG:4326")
+    print(f"  Built ward boundaries: {len(gdf)} wards")
+    return gdf
+
+
 def _build_parcels_from_permits(permits_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     Synthesize parcel-like data from building permits when no parcel layer
@@ -393,6 +476,9 @@ def fetch_all(force_refresh: bool = False) -> dict[str, gpd.GeoDataFrame]:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         datasets["parcels"].to_file(cache_path, driver="GeoJSON")
         print(f"  Cached synthetic parcels to {cache_path}")
+
+    # ── Ward boundaries (always built from hardcoded data) ──────────────
+    datasets["wards"] = _build_ward_boundaries_gdf()
 
     loaded = sum(1 for v in datasets.values() if v is not None)
     print(f"\nLoaded {loaded}/{len(datasets)} datasets.")

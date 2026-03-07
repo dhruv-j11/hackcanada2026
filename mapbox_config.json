@@ -1,5 +1,5 @@
 {
-  "_comment": "Mapbox GL JS layer configuration for ZoneWise parcel scoring heatmap. Copy these into your React/Mapbox setup.",
+  "_comment": "Mapbox GL JS layer configuration for CityLens parcel scoring heatmap. Copy these into your React/Mapbox setup.",
 
   "source": {
     "id": "parcel-scores",
