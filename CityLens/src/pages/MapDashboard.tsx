@@ -1,23 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import MapView from '../components/MapView';
 import CityBadge from '../components/CityBadge';
 import LayerControls from '../components/LayerControls';
 import QueryBar from '../components/QueryBar';
 import ResultsPanel from '../components/ResultsPanel';
 import SettingsModal from '../components/SettingsModal';
+import ParcelDetailPanel from '../components/ParcelDetailPanel';
+import AreaAnalysisPanel from '../components/AreaAnalysisPanel';
+import CategorySelector from '../components/CategorySelector';
+import IonStationSimulator from '../components/IonStationSimulator';
+import DistrictPanel from '../components/DistrictPanel';
+import ScoreLegend from '../components/ScoreLegend';
 import { simulateZoningChange } from '../services/geminiService';
 import type { SimulationResult } from '../services/geminiService';
 import { speakNarration } from '../services/elevenLabsService';
+import type { IonSimulationResult } from '../services/apiService';
 
 export default function MapDashboard() {
-  const [isResultsOpen, setIsResultsOpen] = useState(false);
-  const [showQueryBar, setShowQueryBar] = useState(false);
-  const [currentQuery, setCurrentQuery] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<SimulationResult | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Map Controls State
   const [is3DMode, setIs3DMode] = useState(true);
@@ -25,77 +25,217 @@ export default function MapDashboard() {
   const [visibleLayers, setVisibleLayers] = useState({
     buildings: true,
     ionLine: true,
-    ionStations: true
+    ionStations: true,
+    parcelScores: true,
   });
-  
   const [resetTrigger, setResetTrigger] = useState(0);
 
+  // Old simulation flow state (QueryBar + ResultsPanel)
+  const [isResultsOpen, setIsResultsOpen] = useState(false);
+  const [showQueryBar, setShowQueryBar] = useState(false);
+  const [currentQuery, setCurrentQuery] = useState('');
+  const [simLoading, setSimLoading] = useState(false);
+  const [simResult, setSimResult] = useState<SimulationResult | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Panel state
+  const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
+  const [drawnBbox, setDrawnBbox] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [districtPanelOpen, setDistrictPanelOpen] = useState(false);
+
+  // ION sim state
+  const [ionSimMode, setIonSimMode] = useState(false);
+  const [ionSimClickedLocation, setIonSimClickedLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [ionSimResult, setIonSimResult] = useState<IonSimulationResult | null>(null);
+
+  // Draw area state
+  const [drawAreaMode, setDrawAreaMode] = useState(false);
+
+  // Refresh key to force MapView to re-fetch scores after category change
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Show query bar delayed
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowQueryBar(true);
-    }, 2500); 
+    const timer = setTimeout(() => setShowQueryBar(true), 2500);
     return () => clearTimeout(timer);
   }, []);
 
+  // Simulation query handler (QueryBar → Gemini → ResultsPanel)
   const handleQuerySubmit = async (query: string) => {
     setCurrentQuery(query);
     setIsResultsOpen(true);
-    setLoading(true);
-    
-    // Call Gemini Service
+    setSimLoading(true);
+    // Close other panels
+    setSelectedParcelId(null);
+    setDrawnBbox(null);
+
     const aiResult = await simulateZoningChange(query);
-    setResult(aiResult);
-    setLoading(false);
-    
-    // Play narration
+    setSimResult(aiResult);
+    setSimLoading(false);
+
     setIsSpeaking(true);
     await speakNarration(aiResult.narrative);
     setIsSpeaking(false);
   };
 
+  const handleParcelClick = useCallback((parcelId: string) => {
+    setSelectedParcelId(parcelId);
+    setDrawnBbox(null);
+    setIsResultsOpen(false);
+  }, []);
+
+  const handleBboxDraw = useCallback((bbox: string) => {
+    setDrawnBbox(bbox);
+    setSelectedParcelId(null);
+    setIsResultsOpen(false);
+    setDrawAreaMode(false);
+  }, []);
+
+  const handleMapClick = useCallback((lngLat: { lng: number; lat: number }) => {
+    if (ionSimMode) {
+      setIonSimClickedLocation(lngLat);
+    }
+  }, [ionSimMode]);
+
+  const handleCategoryChange = useCallback((cat: string | null) => {
+    setActiveCategory(cat);
+  }, []);
+
+  const handleRefreshScores = useCallback(() => {
+    setRefreshKey(prev => prev + 1);
+  }, []);
+
+  const handleIonSimResult = useCallback((result: IonSimulationResult | null) => {
+    setIonSimResult(result);
+    if (!result) {
+      setIonSimClickedLocation(null);
+    }
+  }, []);
+
+  const handleIonSimClose = useCallback(() => {
+    setIonSimMode(false);
+    setIonSimClickedLocation(null);
+    setIonSimResult(null);
+  }, []);
+
   return (
     <div className={`relative w-screen h-screen overflow-hidden ${isLightMode ? 'bg-[#F8FAFC]' : 'bg-[#0A1628]'} opacity-0 animate-[fade-in_0.8s_ease-out_forwards]`}>
-      <MapView 
-        showSimulation={!!result && isResultsOpen} 
-        simulationResult={result}
+      <MapView
+        key={refreshKey}
         is3DMode={is3DMode}
         isLightMode={isLightMode}
         visibleLayers={visibleLayers}
         resetTrigger={resetTrigger}
+        onParcelClick={handleParcelClick}
+        onMapClick={handleMapClick}
+        ionSimResult={ionSimResult}
+        ionSimMode={ionSimMode}
+        drawAreaMode={drawAreaMode}
+        onBboxDraw={handleBboxDraw}
+        showSimulation={!!simResult && isResultsOpen}
+        simulationResult={simResult}
       />
-      
+
       <CityBadge />
-      
-      <LayerControls 
+
+      {/* Category selector at top */}
+      {showQueryBar && (
+        <CategorySelector
+          activeCategory={activeCategory}
+          onCategoryChange={handleCategoryChange}
+          onRefreshScores={handleRefreshScores}
+        />
+      )}
+
+      <LayerControls
         is3DMode={is3DMode}
         onToggle3D={() => setIs3DMode(!is3DMode)}
         isLightMode={isLightMode}
         onToggleLight={() => setIsLightMode(!isLightMode)}
         visibleLayers={visibleLayers}
-        onToggleLayer={(layer: 'buildings' | 'ionLine' | 'ionStations') => 
-          setVisibleLayers(prev => ({...prev, [layer]: !prev[layer]}))
+        onToggleLayer={(layer) =>
+          setVisibleLayers(prev => ({ ...prev, [layer]: !prev[layer] }))
         }
         onReset={() => setResetTrigger(prev => prev + 1)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        ionSimMode={ionSimMode}
+        onToggleIonSim={() => {
+          setIonSimMode(!ionSimMode);
+          if (ionSimMode) handleIonSimClose();
+        }}
+        drawAreaMode={drawAreaMode}
+        onToggleDrawArea={() => {
+          setDrawAreaMode(!drawAreaMode);
+          if (!drawAreaMode) setDrawnBbox(null);
+        }}
+        districtPanelOpen={districtPanelOpen}
+        onToggleDistrictPanel={() => setDistrictPanelOpen(!districtPanelOpen)}
       />
-      
-      {showQueryBar && (
+
+      {/* Score Legend */}
+      {visibleLayers.parcelScores && !drawAreaMode && !ionSimMode && <ScoreLegend />}
+
+      {/* QueryBar — restored */}
+      {showQueryBar && !drawAreaMode && !ionSimMode && (
         <QueryBar onQuerySubmit={handleQuerySubmit} />
       )}
-      
-      <ResultsPanel 
-        isOpen={isResultsOpen} 
-        onClose={() => setIsResultsOpen(false)} 
+
+      {/* Simulation ResultsPanel — restored */}
+      <ResultsPanel
+        isOpen={isResultsOpen}
+        onClose={() => setIsResultsOpen(false)}
         query={currentQuery}
-        loading={loading}
-        result={result}
+        loading={simLoading}
+        result={simResult}
         isSpeaking={isSpeaking}
       />
 
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
+      {/* ION Station Simulator */}
+      <IonStationSimulator
+        isActive={ionSimMode}
+        clickedLocation={ionSimClickedLocation}
+        onClose={handleIonSimClose}
+        onSimulationResult={handleIonSimResult}
       />
+
+      {/* Parcel Detail Sidebar */}
+      <ParcelDetailPanel
+        parcelId={selectedParcelId}
+        onClose={() => setSelectedParcelId(null)}
+      />
+
+      {/* Area Analysis Sidebar */}
+      <AreaAnalysisPanel
+        bbox={drawnBbox}
+        onClose={() => { setDrawnBbox(null); setDrawAreaMode(false); }}
+        onParcelClick={handleParcelClick}
+      />
+
+      {/* District Panel */}
+      <DistrictPanel
+        isOpen={districtPanelOpen}
+        onClose={() => setDistrictPanelOpen(false)}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Draw area mode indicator */}
+      {drawAreaMode && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-[#3B82F6]/90 backdrop-blur-md text-white px-4 py-2 rounded-full text-[13px] font-medium shadow-lg animate-fade-in">
+          Click & drag to select an area for analysis
+        </div>
+      )}
+
+      {/* ION sim mode indicator */}
+      {ionSimMode && !ionSimClickedLocation && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 bg-[#06B6D4]/90 backdrop-blur-md text-white px-4 py-2 rounded-full text-[13px] font-medium shadow-lg animate-fade-in">
+          Click on the map to place a hypothetical ION station
+        </div>
+      )}
     </div>
   );
 }
