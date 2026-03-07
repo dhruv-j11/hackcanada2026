@@ -910,6 +910,9 @@ def scored_gdf_to_geojson(gdf: gpd.GeoDataFrame) -> dict:
             # Cluster info (Feature 2)
             "cluster_id": int(row.get("cluster_id", -1)),
             "cluster_name": str(row.get("cluster_name", "Unassigned")),
+            # Planning district (Census integration)
+            "district_name": str(row.get("district_name", "Unknown")),
+            "census_district_name": str(row.get("census_district_name", "Unknown")),
         }
 
         # Include score_delta if present (Feature 6 — simulation)

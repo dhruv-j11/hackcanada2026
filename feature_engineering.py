@@ -588,6 +588,54 @@ def engineer_features(
         parcels_proj["nearest_heritage_name"] = ""
         parcels_proj["heritage_distance_m"] = np.nan
 
+    # ------------------------------------------------------------------
+    # Planning District Assignment (Census Integration)
+    # ------------------------------------------------------------------
+    # Uses the DistrictPlans layer (26 polygons) to assign each parcel
+    # to a planning district. The CENDISTNAM field maps to census district
+    # names for linking with parsed census demographic data.
+    districts_gdf = datasets.get("district_plans")
+    if districts_gdf is not None and len(districts_gdf) > 0:
+        print("  [District] Assigning parcels to planning districts...")
+        districts_proj = districts_gdf.to_crs(epsg=32617)
+
+        # Keep only relevant columns
+        dist_cols = ["geometry"]
+        name_col = "DISTNAME" if "DISTNAME" in districts_proj.columns else None
+        census_col = "CENDISTNAM" if "CENDISTNAM" in districts_proj.columns else None
+        if name_col:
+            dist_cols.append(name_col)
+        if census_col:
+            dist_cols.append(census_col)
+
+        parcel_points = parcels_proj.copy()
+        parcel_points["geometry"] = parcels_proj.geometry.representative_point()
+
+        dist_joined = gpd.sjoin(
+            parcel_points, districts_proj[dist_cols],
+            how="left", predicate="within"
+        )
+        dist_joined = dist_joined[~dist_joined.index.duplicated(keep="first")]
+
+        if name_col:
+            parcels_proj["district_name"] = dist_joined[name_col].fillna("Unknown")
+        else:
+            parcels_proj["district_name"] = "Unknown"
+
+        if census_col:
+            # Clean up null-like values from ArcGIS
+            census_names = dist_joined[census_col].fillna("Unknown")
+            census_names = census_names.replace({"<Null>": "Unknown", " ": "Unknown", "": "Unknown"})
+            parcels_proj["census_district_name"] = census_names
+        else:
+            parcels_proj["census_district_name"] = parcels_proj["district_name"]
+
+        assigned = (parcels_proj["district_name"] != "Unknown").sum()
+        print(f"    District coverage: {assigned}/{len(parcels_proj)} parcels assigned")
+    else:
+        parcels_proj["district_name"] = "Unknown"
+        parcels_proj["census_district_name"] = "Unknown"
+
     # List the feature columns we engineered
     feature_cols = [
         "distance_to_nearest_ion_station",
@@ -605,6 +653,7 @@ def engineer_features(
     meta_cols = [
         "ward_number", "ward_name", "councillor_name",
         "heritage_adjacent", "nearest_heritage_name", "heritage_distance_m",
+        "district_name", "census_district_name",
     ]
 
     print(f"\nFeature engineering complete. {len(parcels_proj)} parcels × {len(feature_cols)} features.")

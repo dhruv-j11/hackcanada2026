@@ -56,6 +56,7 @@ _state = {
     "parcel_count": 0,
     "datasets": None,            # Raw datasets for re-engineering on rescore
     "ion_stations_gdf": None,    # ION stations GDF for simulation
+    "census_data": None,         # Parsed census demographics by district
 }
 
 CACHE_DIR = Path(__file__).parent / "cache"
@@ -90,6 +91,16 @@ async def lifespan(app: FastAPI):
         _state["parcel_count"] = len(scored)
         _state["datasets"] = datasets
         _state["ion_stations_gdf"] = datasets.get("ion_stations")
+
+        # Load census data if available
+        census_path = CACHE_DIR / "waterloo_census_2021.json"
+        if census_path.exists():
+            with open(census_path) as f:
+                _state["census_data"] = json.load(f).get("districts", {})
+            logger.info(f"Loaded census data for {len(_state['census_data'])} districts.")
+        else:
+            _state["census_data"] = {}
+            logger.info("Census data not found (run census_parser.py to generate).")
 
         logger.info(f"Loaded, scored, and clustered {len(scored)} parcels.")
     except Exception as e:
@@ -164,6 +175,20 @@ class IONStationSimRequest(BaseModel):
     longitude: float = Field(..., description="Hypothetical station longitude")
 
 
+class ImpactAnalysisRequest(BaseModel):
+    """Request body for /analyze/impact — Gemini-powered impact analysis."""
+    parcel_id: str = Field(..., description="Parcel ID to analyze")
+    proposed_change: str = Field(
+        ...,
+        description="Description of the proposed change, e.g. 'Replace the 40-unit apartment building with a retail store'",
+        examples=[
+            "Replace the apartment building with a grocery store",
+            "Convert this single-family home to a 6-storey mixed-use building",
+            "Build a 200-unit condo tower on this vacant lot",
+        ],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helper: check data is loaded
 # ---------------------------------------------------------------------------
@@ -235,12 +260,13 @@ def get_parcel_scores(
     bbox: Optional[str] = Query(None, description="Bounding box: minLon,minLat,maxLon,maxLat"),
     cluster: Optional[str] = Query(None, description="Filter by cluster name"),
     heritage_adjacent: Optional[bool] = Query(None, description="Filter heritage-adjacent parcels"),
+    district: Optional[str] = Query(None, description="Filter by planning district name"),
 ):
     """
     Returns scored parcels as a GeoJSON FeatureCollection.
 
-    Each feature includes: parcel_id, score, tier, ward, heritage, cluster, and geometry.
-    Use query params to filter by bbox, cluster archetype, or heritage adjacency.
+    Each feature includes: parcel_id, score, tier, ward, heritage, cluster, district, and geometry.
+    Use query params to filter by bbox, cluster archetype, heritage adjacency, or district.
     """
     _require_data()
 
@@ -262,6 +288,10 @@ def get_parcel_scores(
     # Apply heritage filter
     if heritage_adjacent is not None:
         features = [f for f in features if f["properties"].get("heritage_adjacent") == heritage_adjacent]
+
+    # Apply district filter
+    if district:
+        features = [f for f in features if f["properties"].get("district_name") == district]
 
     metadata = {
         "total_returned": len(features),
@@ -330,6 +360,33 @@ def explain_parcel_endpoint(parcel_id: str):
 
     # Cluster info (Feature 2)
     explanation["cluster_name"] = str(row.get("cluster_name", "Unassigned"))
+
+    # Planning district + census context
+    district_name = str(row.get("district_name", "Unknown"))
+    census_district = str(row.get("census_district_name", "Unknown"))
+    explanation["district_name"] = district_name
+    explanation["census_district_name"] = census_district
+
+    # If census data is loaded, include district demographics
+    census = _state.get("census_data", {})
+    # Try matching by district name, then census district name
+    district_data = census.get(district_name) or census.get(census_district)
+    if district_data:
+        explanation["district_context"] = {
+            "district": district_name,
+            "population": district_data.get("total_population"),
+            "median_age": district_data.get("median_age"),
+            "owner_pct": district_data.get("tenure", {}).get("owner", {}).get("percent"),
+            "renter_pct": district_data.get("tenure", {}).get("renter", {}).get("percent"),
+            "core_housing_need_pct": district_data.get("core_housing_need", {}).get("in_core_need", {}).get("percent"),
+            "median_household_income": district_data.get("income", {}).get("median_after_tax_household_income"),
+            "top_industries": sorted(
+                district_data.get("industry_breakdown", {}).items(),
+                key=lambda x: x[1].get("percent", 0), reverse=True
+            )[:3],
+        }
+    else:
+        explanation["district_context"] = None
 
     # Enhanced explainer (Feature 5)
     enhancements = generate_unlock_suggestions(row, scored_gdf, _state["current_weights"])
@@ -731,6 +788,214 @@ def simulate_ion_station(req: IONStationSimRequest):
 
 
 # ---------------------------------------------------------------------------
+# Gemini-Powered Impact Analysis (Census-Grounded)
+# ---------------------------------------------------------------------------
+@app.post("/analyze/impact")
+def analyze_impact(req: ImpactAnalysisRequest):
+    """
+    Analyze the demographic and community impact of a proposed land-use change
+    for a specific parcel. Uses real census data from the parcel's planning
+    district to ground Gemini's estimates.
+
+    Example: "Replace the 40-unit apartment with a retail store"
+    → Gemini estimates population displacement, housing supply loss,
+      employment creation, tax revenue change, neighbourhood character impact,
+      all grounded in real district-level demographics.
+    """
+    _require_data()
+    scored_gdf = _state["scored_gdf"]
+    census = _state.get("census_data", {})
+
+    # 1. Find the parcel
+    mask = None
+    for id_col in ["OBJECTID", "parcel_id", "PERMIT_ID"]:
+        if id_col in scored_gdf.columns:
+            mask = scored_gdf[id_col].astype(str) == str(req.parcel_id)
+            if mask.any():
+                break
+
+    if mask is None or not mask.any():
+        raise HTTPException(404, f"Parcel '{req.parcel_id}' not found.")
+
+    idx = scored_gdf.index[mask][0]
+    row = scored_gdf.loc[idx]
+
+    # 2. Get parcel details
+    parcel_info = {
+        "parcel_id": req.parcel_id,
+        "address": str(row.get("ADDRESS", "Unknown")),
+        "score": float(row.get("score", 0)),
+        "tier": str(row.get("tier", "Unknown")),
+        "lot_area_sqm": float(row.get("lot_area_sqm", 0)),
+        "zoning_class": str(row.get("current_zoning_density_class", "")),
+        "building_age": float(row.get("current_building_age", 0)),
+        "ward": f"Ward {int(row.get('ward_number', 0))} — {row.get('ward_name', 'Unknown')}",
+        "councillor": str(row.get("councillor_name", "Unknown")),
+        "heritage_adjacent": bool(row.get("heritage_adjacent", 0)),
+        "nearest_heritage_name": str(row.get("nearest_heritage_name", "")),
+        "heritage_distance_m": float(row.get("heritage_distance_m", 0))
+            if not np.isnan(row.get("heritage_distance_m", 0)) else None,
+        "district_name": str(row.get("district_name", "Unknown")),
+        "census_district_name": str(row.get("census_district_name", "Unknown")),
+        "cluster_name": str(row.get("cluster_name", "Unknown")),
+        "distance_to_ion_m": float(row.get("distance_to_nearest_ion_station", 0)),
+        "walkability_proxy": float(row.get("walkability_proxy", 0)),
+    }
+
+    # 3. Look up census data for this parcel's district ONLY
+    district_name = parcel_info["district_name"]
+    census_district = parcel_info["census_district_name"]
+    district_data = census.get(district_name) or census.get(census_district)
+
+    if not district_data:
+        # Try partial match
+        for key, val in census.items():
+            if key.lower() in district_name.lower() or district_name.lower() in key.lower():
+                district_data = val
+                break
+
+    if not district_data:
+        raise HTTPException(
+            404,
+            f"No census data found for district '{district_name}' "
+            f"(census key: '{census_district}'). Census data available for: {list(census.keys())}"
+        )
+
+    # 4. Build context-rich prompt for Gemini
+    # Extract key census sections
+    top_industries = sorted(
+        district_data.get("industry_breakdown", {}).items(),
+        key=lambda x: x[1].get("percent", 0), reverse=True
+    )[:5]
+    top_industry_str = ", ".join(
+        [f"{k.replace('_', ' ').title()}: {v['count']} ({v['percent']}%)" for k, v in top_industries]
+    )
+
+    dwelling_types = district_data.get("dwellings_by_type", {})
+    dwelling_str = ", ".join(
+        [f"{k.replace('_', ' ').title()}: {v['count']} ({v['percent']}%)" for k, v in dwelling_types.items() if v.get("count", 0) > 0]
+    )
+
+    tenure = district_data.get("tenure", {})
+    income = district_data.get("income", {})
+    core_need = district_data.get("core_housing_need", {})
+    labour = district_data.get("labour_force", {})
+    immigration = district_data.get("immigration", {})
+    mobility = district_data.get("mobility_5yr", {})
+    households_by_size = district_data.get("households_by_size", {})
+
+    # Heritage warning
+    heritage_context = ""
+    if parcel_info["heritage_adjacent"]:
+        heritage_context = (
+            f"\n⚠️ HERITAGE CONSTRAINT: This parcel is {parcel_info['heritage_distance_m']}m from "
+            f"'{parcel_info['nearest_heritage_name']}', a designated heritage building. "
+            "Any development will require a Heritage Impact Assessment, "
+            "adding 6-12 months to planning timelines and potentially limiting "
+            "building height and massing.\n"
+        )
+
+    prompt = f"""You are CityLens, an AI urban planning analyst for Waterloo, Ontario. 
+You specialize in estimating the real-world impact of land-use changes using actual census data.
+
+PROPOSED CHANGE: {req.proposed_change}
+
+PARCEL DETAILS:
+- Address: {parcel_info['address']}
+- Lot Area: {parcel_info['lot_area_sqm']:.0f} sqm
+- Current Zoning: {parcel_info['zoning_class']}
+- Building Age: {parcel_info['building_age']:.0f} years
+- Development Score: {parcel_info['score']:.1f}/100 ({parcel_info['tier']})
+- Cluster Archetype: {parcel_info['cluster_name']}
+- Distance to ION LRT: {parcel_info['distance_to_ion_m']:.0f}m
+- Walkability (nearby amenities): {parcel_info['walkability_proxy']:.0f}
+- Ward: {parcel_info['ward']}
+- Councillor: {parcel_info['councillor']}
+{heritage_context}
+PLANNING DISTRICT: {district_name}
+(This is the ONLY district affected — all demographic data below is specific to this district)
+
+DISTRICT DEMOGRAPHICS (2021 Census):
+- Total Population: {district_data.get('total_population', 'N/A')}
+- Median Age: {district_data.get('median_age', 'N/A')}
+- Total Households: {district_data.get('total_private_households', 'N/A')}
+- Avg Persons Per Household: {district_data.get('avg_persons_per_household', 'N/A')}
+- Household Sizes: {json.dumps({k: v for k, v in households_by_size.items()}, default=str)}
+- Total Dwellings: {district_data.get('total_dwellings', 'N/A')}
+- Dwelling Types: {dwelling_str}
+- Tenure: Owner {tenure.get('owner', {}).get('count', 'N/A')} ({tenure.get('owner', {}).get('percent', 'N/A')}%), Renter {tenure.get('renter', {}).get('count', 'N/A')} ({tenure.get('renter', {}).get('percent', 'N/A')}%)
+- Core Housing Need: {core_need.get('in_core_need', {}).get('count', 'N/A')} households ({core_need.get('in_core_need', {}).get('percent', 'N/A')}%)
+- Median After-Tax Household Income: ${income.get('median_after_tax_household_income', 'N/A')}
+- Employment Rate: {labour.get('employment_rate', 'N/A')}%
+- Unemployment Rate: {labour.get('unemployment_rate', 'N/A')}%
+- Top Industries: {top_industry_str}
+- Immigrants: {immigration.get('immigrants', {}).get('count', 'N/A')} ({immigration.get('immigrants', {}).get('percent', 'N/A')}%)
+- 5yr Mobility (movers): {mobility.get('movers', {}).get('count', 'N/A')} ({mobility.get('movers', {}).get('percent', 'N/A')}%)
+
+INSTRUCTIONS:
+Based on the proposed change and the REAL demographics above, provide a structured analysis with:
+
+1. **Population Impact**: Estimate how many residents would be displaced or added. Use the district's avg persons per household and dwelling type mix to ground your estimates.
+
+2. **Housing Supply Impact**: How does this change affect the district's housing stock? Reference the current dwelling type breakdown and core housing need rate.
+
+3. **Employment Impact**: Estimate jobs created or lost. Reference the district's current industry breakdown and employment rate.
+
+4. **Tax Revenue Impact**: Estimate the change in annual property tax revenue using Waterloo's typical commercial vs residential rates.
+
+5. **Community Character**: How does this change affect the neighbourhood? Consider the district's current tenure split (owner/renter), median age, income, and mobility.
+
+6. **Displacement Risk**: Assess based on the district's core housing need rate, renter percentage, and median income relative to Waterloo's median ($82,000).
+
+7. **Transit Impact**: Consider the parcel's distance to ION LRT ({parcel_info['distance_to_ion_m']:.0f}m) and how the change affects transit ridership.
+
+8. **Recommendation**: Provide a balanced assessment — is this change net positive or negative for the district? What conditions or mitigations would improve the outcome?
+
+Be specific — cite actual numbers from the census data. Give concrete estimates, not vague generalizations."""
+
+    # 5. Call Gemini
+    import os
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+
+    if gemini_api_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_api_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            analysis = response.text
+        except Exception as e:
+            analysis = f"[Gemini API error: {str(e)}] Set GEMINI_API_KEY environment variable."
+    else:
+        analysis = (
+            "[GEMINI_API_KEY not set] To enable AI-powered impact analysis, "
+            "set the GEMINI_API_KEY environment variable and restart the server. "
+            "The census context has been prepared and is returned in the 'census_context' field below."
+        )
+
+    return {
+        "parcel": parcel_info,
+        "proposed_change": req.proposed_change,
+        "district": district_name,
+        "analysis": analysis,
+        "census_context": {
+            "district": district_name,
+            "population": district_data.get("total_population"),
+            "median_age": district_data.get("median_age"),
+            "total_households": district_data.get("total_private_households"),
+            "avg_persons_per_household": district_data.get("avg_persons_per_household"),
+            "total_dwellings": district_data.get("total_dwellings"),
+            "tenure": tenure,
+            "core_housing_need_pct": core_need.get("in_core_need", {}).get("percent"),
+            "median_household_income": income.get("median_after_tax_household_income"),
+            "unemployment_rate": labour.get("unemployment_rate"),
+            "top_industries": [{k.replace("_", " ").title(): v} for k, v in top_industries],
+            "dwelling_types": dwelling_types,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # Permit Endpoints (LLM-selective-passing)
 # ---------------------------------------------------------------------------
 @app.get("/permits/nearby")
@@ -799,6 +1064,81 @@ def ask_about_permits(req: PermitQueryRequest):
 
 
 # ---------------------------------------------------------------------------
+# Planning District & Census Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/districts")
+def list_districts():
+    """
+    Lists all planning districts with parcel counts and census data availability.
+    Use the district name with GET /district/{name}/demographics for full census data.
+    """
+    _require_data()
+    scored_gdf = _state["scored_gdf"]
+    census = _state.get("census_data", {})
+
+    districts = []
+    if "district_name" in scored_gdf.columns:
+        district_groups = scored_gdf.groupby("district_name")
+        for name, group in district_groups:
+            if name == "Unknown":
+                continue
+            census_name = group["census_district_name"].mode().iloc[0] if "census_district_name" in group.columns else name
+            has_census = census_name in census or name in census
+            districts.append({
+                "district_name": name,
+                "census_district_name": census_name,
+                "parcel_count": len(group),
+                "avg_score": round(float(group["score"].mean()), 1),
+                "has_census_data": has_census,
+            })
+
+    # Sort by parcel count descending
+    districts.sort(key=lambda x: x["parcel_count"], reverse=True)
+
+    return {
+        "total_districts": len(districts),
+        "census_data_loaded": len(census) > 0,
+        "census_districts_available": len(census),
+        "districts": districts,
+    }
+
+
+@app.get("/district/{district_name}/demographics")
+def get_district_demographics(district_name: str):
+    """
+    Returns full census demographics for a planning district.
+    Census data must be loaded from cache/waterloo_census_2021.json
+    (generated by census_parser.py).
+    """
+    census = _state.get("census_data", {})
+    if not census:
+        raise HTTPException(
+            503,
+            "Census data not loaded. Run census_parser.py to generate "
+            "cache/waterloo_census_2021.json, then restart the server."
+        )
+
+    # Try exact match first, then case-insensitive
+    district = census.get(district_name)
+    if not district:
+        # Try case-insensitive match
+        for key, val in census.items():
+            if key.lower() == district_name.lower():
+                district = val
+                break
+
+    if not district:
+        available = list(census.keys())
+        raise HTTPException(
+            404,
+            f"District '{district_name}' not found in census data. "
+            f"Available: {available}"
+        )
+
+    return district
+
+
+# ---------------------------------------------------------------------------
 # Health / Status
 # ---------------------------------------------------------------------------
 @app.get("/health")
@@ -813,17 +1153,27 @@ def health():
     }
 
     if scored_gdf is not None:
-        # Feature 2: Cluster info
+        # Cluster info
         cluster_meta = scored_gdf.attrs.get("cluster_metadata", [])
         response["cluster_count"] = len(cluster_meta)
 
-        # Feature 1: Ward coverage
+        # Ward coverage
         if "ward_number" in scored_gdf.columns:
             response["ward_coverage"] = int((scored_gdf["ward_number"] > 0).sum())
 
-        # Feature 4: Heritage flags
+        # Heritage flags
         if "heritage_adjacent" in scored_gdf.columns:
             response["heritage_adjacent_count"] = int(scored_gdf["heritage_adjacent"].sum())
+
+        # District coverage
+        if "district_name" in scored_gdf.columns:
+            response["district_coverage"] = int((scored_gdf["district_name"] != "Unknown").sum())
+            response["unique_districts"] = int(scored_gdf["district_name"].nunique())
+
+    # Census data status
+    census = _state.get("census_data", {})
+    response["census_loaded"] = len(census) > 0
+    response["census_districts"] = len(census)
 
     return response
 
