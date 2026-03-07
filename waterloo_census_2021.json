@@ -1,0 +1,657 @@
+{
+  "metadata": {
+    "source": "City of Waterloo Growth Management, 2021 Census Profile",
+    "census_year": 2021,
+    "url": "https://www.waterloo.ca/media/3o5lqith/2021-census-profiles-city-of-waterloo.pdf",
+    "parsed_date": "2026-03-07",
+    "districts_parsed": 18,
+    "waterloo_reference": {
+      "total_population": 121435,
+      "total_households": 47040,
+      "median_age": 36
+    },
+    "sections_per_district": [
+      "total_population",
+      "population_by_age",
+      "median_age",
+      "total_private_households",
+      "households_by_size",
+      "avg_persons_per_household",
+      "marital_status",
+      "total_census_families",
+      "families_by_size",
+      "couple_families",
+      "one_parent_families",
+      "couples_children",
+      "household_maintainer_age",
+      "total_dwellings",
+      "dwellings_by_type",
+      "condominium",
+      "core_housing_need",
+      "housing_indicators",
+      "labour_force",
+      "industry_breakdown",
+      "education",
+      "tenure",
+      "income",
+      "immigration",
+      "immigration_by_period",
+      "immigration_by_place",
+      "mobility_5yr"
+    ]
+  },
+  "districts": {
+    "Beechwood": {
+      "district_name": "Beechwood",
+      "median_age": 38.0,
+      "tenure": {
+        "owner": {
+          "count": 2150,
+          "percent": 59.4
+        },
+        "renter": {
+          "count": 1470,
+          "percent": 40.6
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          41600.0,
+          41200.0,
+          38400.0,
+          37600.0,
+          128000.0,
+          122400.0,
+          102400.0,
+          99300.0,
+          93000.0,
+          94000.0,
+          81000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 81000.0,
+        "average_total_household_income": 128000.0,
+        "median_total_household_income": 93000.0,
+        "average_after_tax_household_income": 102400.0
+      }
+    },
+    "Beechwood West": {
+      "district_name": "Beechwood West",
+      "median_age": 44.0,
+      "tenure": {
+        "owner": {
+          "count": 2125,
+          "percent": 82.7
+        },
+        "renter": {
+          "count": 445,
+          "percent": 17.3
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          48000.0,
+          41200.0,
+          42400.0,
+          37600.0,
+          167600.0,
+          122400.0,
+          129600.0,
+          99300.0,
+          130000.0,
+          94000.0,
+          110000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 110000.0,
+        "average_total_household_income": 167600.0,
+        "median_total_household_income": 130000.0,
+        "average_after_tax_household_income": 129600.0
+      }
+    },
+    "Central": {
+      "district_name": "Central",
+      "median_age": 35.0,
+      "tenure": {
+        "owner": {
+          "count": 2170,
+          "percent": 35.6
+        },
+        "renter": {
+          "count": 3920,
+          "percent": 64.4
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          39600.0,
+          41200.0,
+          36400.0,
+          37600.0,
+          100400.0,
+          122400.0,
+          81900.0,
+          99300.0,
+          74500.0,
+          94000.0,
+          66500.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 66500.0,
+        "average_total_household_income": 100400.0,
+        "median_total_household_income": 74500.0,
+        "average_after_tax_household_income": 81900.0
+      }
+    },
+    "Clair Hills": {
+      "district_name": "Clair Hills",
+      "median_age": 35.0,
+      "tenure": {
+        "owner": {
+          "count": 1545,
+          "percent": 83.7
+        },
+        "renter": {
+          "count": 295,
+          "percent": 16.0
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          46400.0,
+          41200.0,
+          41600.0,
+          37600.0,
+          148600.0,
+          122400.0,
+          120900.0,
+          99300.0,
+          131000.0,
+          94000.0,
+          111000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 111000.0,
+        "average_total_household_income": 148600.0,
+        "median_total_household_income": 131000.0,
+        "average_after_tax_household_income": 120900.0
+      }
+    },
+    "Columbia": {
+      "district_name": "Columbia",
+      "median_age": 25.0,
+      "tenure": {
+        "owner": {
+          "count": 730,
+          "percent": 11.8
+        },
+        "renter": {
+          "count": 5440,
+          "percent": 88.2
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          24400.0,
+          41200.0,
+          23800.0,
+          37600.0,
+          54100.0,
+          122400.0,
+          49440.0,
+          99300.0,
+          45200.0,
+          94000.0,
+          42800.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 42800.0,
+        "average_total_household_income": 54100.0,
+        "median_total_household_income": 45200.0,
+        "average_after_tax_household_income": 49440.0
+      }
+    },
+    "Columbia Hills": {
+      "district_name": "Columbia Hills",
+      "median_age": 34.0,
+      "tenure": {
+        "owner": {
+          "count": 1650,
+          "percent": 78.0
+        },
+        "renter": {
+          "count": 465,
+          "percent": 22.0
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          40400.0,
+          41200.0,
+          37200.0,
+          37600.0,
+          133400.0,
+          122400.0,
+          110300.0,
+          99300.0,
+          124000.0,
+          94000.0,
+          104000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 104000.0,
+        "average_total_household_income": 133400.0,
+        "median_total_household_income": 124000.0,
+        "average_after_tax_household_income": 110300.0
+      }
+    },
+    "Conservation": {
+      "district_name": "Conservation",
+      "median_age": 44.0,
+      "tenure": {
+        "owner": {
+          "count": 965,
+          "percent": 93.2
+        },
+        "renter": {
+          "count": 70,
+          "percent": 6.8
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          53600.0,
+          41200.0,
+          47600.0,
+          37600.0,
+          215600.0,
+          122400.0,
+          166400.0,
+          99300.0,
+          140000.0,
+          94000.0,
+          120000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 120000.0,
+        "average_total_household_income": 215600.0,
+        "median_total_household_income": 140000.0,
+        "average_after_tax_household_income": 166400.0
+      }
+    },
+    "Dearborn": {
+      "district_name": "Dearborn",
+      "median_age": 49.0,
+      "tenure": {
+        "owner": {
+          "count": 590,
+          "percent": 83.7
+        },
+        "renter": {
+          "count": 110,
+          "percent": 15.6
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          42800.0,
+          41200.0,
+          40000.0,
+          37600.0,
+          105600.0,
+          122400.0,
+          87800.0,
+          99300.0,
+          89000.0,
+          94000.0,
+          74500.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 74500.0,
+        "average_total_household_income": 105600.0,
+        "median_total_household_income": 89000.0,
+        "average_after_tax_household_income": 87800.0
+      }
+    },
+    "Eastbridge": {
+      "district_name": "Eastbridge",
+      "median_age": 40.0,
+      "tenure": {
+        "owner": {
+          "count": 1975,
+          "percent": 90.0
+        },
+        "renter": {
+          "count": 220,
+          "percent": 10.0
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          54800.0,
+          41200.0,
+          48000.0,
+          37600.0,
+          162800.0,
+          122400.0,
+          130200.0,
+          99300.0,
+          146000.0,
+          94000.0,
+          122000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 122000.0,
+        "average_total_household_income": 162800.0,
+        "median_total_household_income": 146000.0,
+        "average_after_tax_household_income": 130200.0
+      }
+    },
+    "Lakeshore": {
+      "district_name": "Lakeshore",
+      "median_age": 37.0,
+      "tenure": {
+        "owner": {
+          "count": 1425,
+          "percent": 53.8
+        },
+        "renter": {
+          "count": 1225,
+          "percent": 46.2
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          38800.0,
+          41200.0,
+          35600.0,
+          37600.0,
+          92500.0,
+          122400.0,
+          80500.0,
+          99300.0,
+          79000.0,
+          94000.0,
+          71000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 71000.0,
+        "average_total_household_income": 92500.0,
+        "median_total_household_income": 79000.0,
+        "average_after_tax_household_income": 80500.0
+      }
+    },
+    "Lakeshore North/Conservation": {
+      "district_name": "Lakeshore North/Conservation",
+      "median_age": 43.0,
+      "tenure": {
+        "owner": {
+          "count": 1790,
+          "percent": 89.9
+        },
+        "renter": {
+          "count": 195,
+          "percent": 9.8
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          48800.0,
+          41200.0,
+          43200.0,
+          37600.0,
+          131600.0,
+          122400.0,
+          109100.0,
+          99300.0,
+          110000.0,
+          94000.0,
+          95000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 95000.0,
+        "average_total_household_income": 131600.0,
+        "median_total_household_income": 110000.0,
+        "average_after_tax_household_income": 109100.0
+      }
+    },
+    "Laurelwood": {
+      "district_name": "Laurelwood",
+      "median_age": 41.0,
+      "tenure": {
+        "owner": {
+          "count": 1380,
+          "percent": 89.0
+        },
+        "renter": {
+          "count": 175,
+          "percent": 11.3
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          49600.0,
+          41200.0,
+          43600.0,
+          37600.0,
+          189400.0,
+          122400.0,
+          145800.0,
+          99300.0,
+          151000.0,
+          94000.0,
+          125000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 125000.0,
+        "average_total_household_income": 189400.0,
+        "median_total_household_income": 151000.0,
+        "average_after_tax_household_income": 145800.0
+      }
+    },
+    "Lexington": {
+      "district_name": "Lexington",
+      "median_age": 40.0,
+      "tenure": {
+        "owner": {
+          "count": 2230,
+          "percent": 81.8
+        },
+        "renter": {
+          "count": 495,
+          "percent": 18.2
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          50800.0,
+          41200.0,
+          44400.0,
+          37600.0,
+          148000.0,
+          122400.0,
+          119700.0,
+          99300.0,
+          127000.0,
+          94000.0,
+          108000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 108000.0,
+        "average_total_household_income": 148000.0,
+        "median_total_household_income": 127000.0,
+        "average_after_tax_household_income": 119700.0
+      }
+    },
+    "Lincoln": {
+      "district_name": "Lincoln",
+      "median_age": 43.0,
+      "tenure": {
+        "owner": {
+          "count": 2270,
+          "percent": 63.9
+        },
+        "renter": {
+          "count": 1285,
+          "percent": 36.2
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          45600.0,
+          41200.0,
+          40800.0,
+          37600.0,
+          129600.0,
+          122400.0,
+          103900.0,
+          99300.0,
+          95000.0,
+          94000.0,
+          82000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 82000.0,
+        "average_total_household_income": 129600.0,
+        "median_total_household_income": 95000.0,
+        "average_after_tax_household_income": 103900.0
+      }
+    },
+    "Rural East / Country Squire": {
+      "district_name": "Rural East / Country Squire",
+      "median_age": 40.0,
+      "tenure": {
+        "owner": {
+          "count": 495,
+          "percent": 94.3
+        },
+        "renter": {
+          "count": 30,
+          "percent": 5.7
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          53200.0,
+          41200.0,
+          46000.0,
+          37600.0,
+          269000.0,
+          122400.0,
+          167000.0,
+          99300.0,
+          155000.0,
+          94000.0,
+          125000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 125000.0,
+        "average_total_household_income": 269000.0,
+        "median_total_household_income": 155000.0,
+        "average_after_tax_household_income": 167000.0
+      }
+    },
+    "Westmount (Waterloo)": {
+      "district_name": "Westmount (Waterloo)",
+      "median_age": 39.0,
+      "tenure": {
+        "owner": {
+          "count": 1030,
+          "percent": 57.1
+        },
+        "renter": {
+          "count": 780,
+          "percent": 43.2
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          42400.0,
+          41200.0,
+          38400.0,
+          37600.0,
+          117300.0,
+          122400.0,
+          94800.0,
+          99300.0,
+          81000.0,
+          94000.0,
+          70500.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 70500.0,
+        "average_total_household_income": 117300.0,
+        "median_total_household_income": 81000.0,
+        "average_after_tax_household_income": 94800.0
+      }
+    },
+    "Westvale": {
+      "district_name": "Westvale",
+      "median_age": 42.0,
+      "tenure": {
+        "owner": {
+          "count": 2045,
+          "percent": 86.8
+        },
+        "renter": {
+          "count": 310,
+          "percent": 13.2
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          49600.0,
+          41200.0,
+          44400.0,
+          37600.0,
+          133000.0,
+          122400.0,
+          110000.0,
+          99300.0,
+          121000.0,
+          94000.0,
+          103000.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 103000.0,
+        "average_total_household_income": 133000.0,
+        "median_total_household_income": 121000.0,
+        "average_after_tax_household_income": 110000.0
+      }
+    },
+    "Willowdale": {
+      "district_name": "Willowdale",
+      "median_age": 38.0,
+      "tenure": {
+        "owner": {
+          "count": 2270,
+          "percent": 64.5
+        },
+        "renter": {
+          "count": 1250,
+          "percent": 35.5
+        }
+      },
+      "income": {
+        "raw_dollar_values": [
+          42800.0,
+          41200.0,
+          38800.0,
+          37600.0,
+          103200.0,
+          122400.0,
+          86600.0,
+          99300.0,
+          85000.0,
+          94000.0,
+          75500.0,
+          82000.0
+        ],
+        "median_after_tax_household_income": 75500.0,
+        "average_total_household_income": 103200.0,
+        "median_total_household_income": 85000.0,
+        "average_after_tax_household_income": 86600.0
+      }
+    }
+  }
+}

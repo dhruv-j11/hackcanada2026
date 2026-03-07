@@ -523,10 +523,70 @@ def engineer_features(
     else:
         parcels_proj["walkability_proxy"] = 0
 
+
+    # NOTE: CRS conversion to WGS84 happens after ward + heritage joins below
+    # Ward Assignment (Feature 1)
     # ------------------------------------------------------------------
-    # Convert back to WGS84 for output
+    wards_gdf = datasets.get("wards")
+    if wards_gdf is not None and len(wards_gdf) > 0:
+        print("  [Ward] Assigning parcels to wards...")
+        wards_proj = wards_gdf.to_crs(epsg=32617)
+        # Use representative point for join
+        parcel_points = parcels_proj.copy()
+        parcel_points["geometry"] = parcels_proj.geometry.representative_point()
+        ward_joined = gpd.sjoin(
+            parcel_points, wards_proj[["geometry", "ward_number", "ward_name", "councillor_name"]],
+            how="left", predicate="within"
+        )
+        # Handle duplicates from overlapping ward boundaries
+        ward_joined = ward_joined[~ward_joined.index.duplicated(keep="first")]
+        parcels_proj["ward_number"] = ward_joined["ward_number"].fillna(0).astype(int)
+        parcels_proj["ward_name"] = ward_joined["ward_name"].fillna("Unknown")
+        parcels_proj["councillor_name"] = ward_joined["councillor_name"].fillna("Unknown")
+        print(f"    Ward coverage: {(parcels_proj['ward_number'] > 0).sum()}/{len(parcels_proj)} parcels assigned")
+    else:
+        parcels_proj["ward_number"] = 0
+        parcels_proj["ward_name"] = "Unknown"
+        parcels_proj["councillor_name"] = "Unknown"
+
     # ------------------------------------------------------------------
-    result = parcels_proj.to_crs(epsg=4326)
+    # Heritage Collision Detection (Feature 4)
+    # ------------------------------------------------------------------
+    heritage_gdf = datasets.get("heritage_buildings")
+    if heritage_gdf is not None and len(heritage_gdf) > 0:
+        print("  [Heritage] Detecting parcels within 50m of heritage buildings...")
+        heritage_proj = heritage_gdf.to_crs(epsg=32617)
+
+        # Find nearest heritage building for each parcel
+        parcel_points = parcels_proj.copy()
+        parcel_points["geometry"] = parcels_proj.geometry.representative_point()
+
+        heritage_nearest = gpd.sjoin_nearest(
+            parcel_points, heritage_proj,
+            how="left", distance_col="heritage_distance_m", max_distance=5000
+        )
+        heritage_nearest = heritage_nearest[~heritage_nearest.index.duplicated(keep="first")]
+
+        parcels_proj["heritage_distance_m"] = heritage_nearest["heritage_distance_m"].round(1)
+        parcels_proj["heritage_adjacent"] = (parcels_proj["heritage_distance_m"] <= 50).astype(int)
+
+        # Get name of nearest heritage building
+        name_col = None
+        for candidate in ["NAME", "name", "ADDRESS", "HERITAGE_NAME"]:
+            if candidate in heritage_proj.columns:
+                name_col = candidate
+                break
+        if name_col:
+            parcels_proj["nearest_heritage_name"] = heritage_nearest[name_col].fillna("Unknown")
+        else:
+            parcels_proj["nearest_heritage_name"] = "Unknown"
+
+        n_adj = parcels_proj["heritage_adjacent"].sum()
+        print(f"    {n_adj} parcels within 50m of a heritage building")
+    else:
+        parcels_proj["heritage_adjacent"] = 0
+        parcels_proj["nearest_heritage_name"] = ""
+        parcels_proj["heritage_distance_m"] = np.nan
 
     # List the feature columns we engineered
     feature_cols = [
@@ -541,9 +601,18 @@ def engineer_features(
         "walkability_proxy",
     ]
 
-    print(f"\nFeature engineering complete. {len(result)} parcels × {len(feature_cols)} features.")
-    print(f"Features: {feature_cols}")
+    # Additional metadata columns (not used in scoring, but exposed in API)
+    meta_cols = [
+        "ward_number", "ward_name", "councillor_name",
+        "heritage_adjacent", "nearest_heritage_name", "heritage_distance_m",
+    ]
 
+    print(f"\nFeature engineering complete. {len(parcels_proj)} parcels × {len(feature_cols)} features.")
+    print(f"Features: {feature_cols}")
+    print(f"Metadata: {meta_cols}")
+
+    # Convert back to WGS84 for output
+    result = parcels_proj.to_crs(epsg=4326)
     return result
 
 
