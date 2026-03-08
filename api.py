@@ -21,9 +21,13 @@ Run:
 
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional, List
+
+from dotenv import load_dotenv
+load_dotenv()  # Load .env from project root
 
 import geopandas as gpd
 import numpy as np
@@ -954,7 +958,6 @@ Based on the proposed change and the REAL demographics above, provide a structur
 Be specific — cite actual numbers from the census data. Give concrete estimates, not vague generalizations."""
 
     # 5. Call Gemini
-    import os
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
 
     if gemini_api_key:
@@ -1035,25 +1038,33 @@ def ask_about_permits(req: PermitQueryRequest):
         token_budget=req.token_budget,
     )
 
-    # TODO: Wire up your Gemini API key here:
-    #
-    # import google.generativeai as genai
-    # genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    # model = genai.GenerativeModel("gemini-2.0-flash")
-    # response = model.generate_content(
-    #     f"You are CityLens, an AI urban planning assistant for Waterloo, Ontario. "
-    #     f"Answer questions about development activity using the provided building "
-    #     f"permit data. Be specific — cite permit numbers, addresses, and values.\n\n"
-    #     f"Building permits near ({req.latitude}, {req.longitude}):\n"
-    #     f"{permit_context}\n\n"
-    #     f"Question: {req.question}"
-    # )
-    # answer = response.text
-
-    answer = (
-        f"[LLM placeholder] Found {permit_context.count('#')} permits "
-        f"within {req.radius_m}m. Wire up your GEMINI_API_KEY to get real answers."
-    )
+    # Use Gemini if key is available
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if gemini_api_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_api_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(
+                f"You are CityLens, an AI urban planning assistant for Waterloo, Ontario. "
+                f"Use the provided building permit data to answer questions about "
+                f"development activity in specific areas. Be specific — cite permit numbers, "
+                f"addresses, and values.\n\n"
+                f"Building permits near ({req.latitude}, {req.longitude}):\n"
+                f"{permit_context}\n\n"
+                f"Question: {req.question}"
+            )
+            answer = response.text
+        except Exception as e:
+            answer = (
+                f"[Gemini API error: {str(e)}] "
+                f"Found {permit_context.count('#')} permits within {req.radius_m}m."
+            )
+    else:
+        answer = (
+            f"[GEMINI_API_KEY not set] Found {permit_context.count('#')} permits "
+            f"within {req.radius_m}m. Set GEMINI_API_KEY in .env to get AI-powered answers."
+        )
 
     return {
         "answer": answer,
