@@ -1,4 +1,4 @@
-# citylens.ai
+# CityLens
 
 
 AI Geomodeling Agent for Canadian Cities
