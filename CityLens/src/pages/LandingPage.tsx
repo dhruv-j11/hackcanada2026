@@ -7,8 +7,17 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const [showVideo, setShowVideo] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const typedRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    return () => window.removeEventListener('mousemove', handleGlobalMouseMove);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -184,6 +193,11 @@ export default function LandingPage() {
 
   return (
     <div className="citylens-landing">
+      {/* Dynamic mouse glow trail */}
+      <div 
+        className="mouse-glow" 
+        style={{ left: `${mousePos.x}px`, top: `${mousePos.y}px` }}
+      />
       <div className="noise" />
 
       <nav className={`navbar ${scrolled ? 'scrolled' : ''}`} id="navbar">
