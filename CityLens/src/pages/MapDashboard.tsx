@@ -145,6 +145,7 @@ export default function MapDashboard() {
         onBboxDraw={handleBboxDraw}
         showSimulation={!!simResult && isResultsOpen}
         simulationResult={simResult}
+        selectedParcelId={selectedParcelId}
       />
 
       <CityBadge />

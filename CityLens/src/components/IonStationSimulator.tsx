@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Train, Loader2, TrendingUp, ArrowUpRight } from 'lucide-react';
+import { X, Train, Loader2 } from 'lucide-react';
 import { simulateIonStation } from '../services/apiService';
 import type { IonSimulationResult } from '../services/apiService';
 
@@ -83,19 +83,6 @@ export default function IonStationSimulator({ isActive, clickedLocation, onClose
 
           {result && result.summary && (
             <div className="space-y-3">
-              {/* Score change summary */}
-              <div className="bg-[#0A0F2E] rounded-xl p-3 border border-[#06B6D4]/20">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[12px] text-[#64748B] uppercase font-bold tracking-wider">Avg Score Impact</span>
-                  <TrendingUp className="w-4 h-4 text-[#22C55E]" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] text-[#94A3B8]">{result.summary.avg_score_before.toFixed(1)}</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-[#22C55E]" />
-                  <span className="text-[20px] font-bold text-[#22C55E]">{result.summary.avg_score_after.toFixed(1)}</span>
-                </div>
-              </div>
-
               {/* Top improved */}
               <div>
                 <h4 className="text-[11px] uppercase text-[#64748B] font-bold tracking-wider mb-2">Most Improved</h4>

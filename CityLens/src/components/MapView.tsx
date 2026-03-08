@@ -35,18 +35,21 @@ interface MapViewProps {
   onBboxDraw?: (bbox: string) => void;
   showSimulation?: boolean;
   simulationResult?: SimulationResult | null;
+  selectedParcelId?: string | null;
 }
 
 export default function MapView({
   is3DMode, isLightMode, visibleLayers, resetTrigger,
   onParcelClick, onMapClick, ionSimResult, ionSimMode, ionSimClickedLocation, drawAreaMode, onBboxDraw,
-  showSimulation, simulationResult
+  showSimulation, simulationResult, selectedParcelId
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const drawStartRef = useRef<mapboxgl.LngLat | null>(null);
   const ionMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const selectionMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const parcelFeaturesRef = useRef<any[]>([]);
 
   // Refs for values used in callbacks (avoids stale closure)
   const isLightModeRef = useRef(isLightMode);
@@ -134,70 +137,132 @@ export default function MapView({
       setMapReady(true);
     });
 
-    // ── Parcel click handlers ──
-    m.on('click', 'parcel-scores-3d', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
-      if (ionSimModeRef.current || drawAreaModeRef.current) return;
-      const feature = e.features?.[0];
-      if (feature?.properties?.parcel_id) {
-        onParcelClickRef.current?.(feature.properties.parcel_id);
-        if (m.getLayer('parcel-highlight')) {
-          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
-        }
-        e.originalEvent.stopPropagation();
-      }
-    });
-    m.on('click', 'parcel-scores-flat', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
-      if (ionSimModeRef.current || drawAreaModeRef.current) return;
-      const feature = e.features?.[0];
-      if (feature?.properties?.parcel_id) {
-        onParcelClickRef.current?.(feature.properties.parcel_id);
-        if (m.getLayer('parcel-highlight')) {
-          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
-        }
-        e.originalEvent.stopPropagation();
-      }
-    });
-
-    // General click (for ION sim mode + clear highlight)
+    // ── Unified click handler ──
+    // Finds the nearest parcel by coordinate distance (bypasses Mapbox layer query issues).
     m.on('click', (e: mapboxgl.MapMouseEvent) => {
-      if (ionSimModeRef.current) {
-        onMapClickRef.current?.({ lng: e.lngLat.lng, lat: e.lngLat.lat });
-      }
-      const features = m.queryRenderedFeatures(e.point, { layers: ['parcel-scores-3d', 'parcel-scores-flat'] });
-      if (!features.length && m.getLayer('parcel-highlight')) {
-        m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], '']);
-      }
-    });
+      console.log('[MapView] click event fired', { lng: e.lngLat.lng, lat: e.lngLat.lat });
 
-    // ── Hover highlight + cursor changes ──
-    m.on('mousemove', 'parcel-scores-3d', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
-      m.getCanvas().style.cursor = 'pointer';
-      if (e.features && e.features.length > 0) {
-        const pid = e.features[0].properties?.parcel_id;
-        if (pid && m.getLayer('parcel-hover')) {
-          m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], pid]);
+      // ION sim mode takes priority
+      if (ionSimModeRef.current) {
+        console.log('[MapView] ION sim mode active, forwarding to onMapClick');
+        onMapClickRef.current?.({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+        return;
+      }
+      if (drawAreaModeRef.current) {
+        console.log('[MapView] draw area mode active, ignoring');
+        return;
+      }
+
+      const clickLng = e.lngLat.lng;
+      const clickLat = e.lngLat.lat;
+      const features = parcelFeaturesRef.current;
+      console.log('[MapView] parcelFeaturesRef count:', features.length);
+      if (!features.length) {
+        console.log('[MapView] no features stored, exiting');
+        return;
+      }
+
+      // Find nearest parcel by centroid distance
+      let bestId: string | null = null;
+      let bestDist = Infinity;
+      for (const f of features) {
+        const geom = f.geometry;
+        if (!geom) continue;
+        let cx: number, cy: number;
+        if (geom.type === 'Point') {
+          cx = geom.coordinates[0];
+          cy = geom.coordinates[1];
+        } else if (geom.type === 'Polygon') {
+          const ring = geom.coordinates[0];
+          if (!ring || ring.length === 0) continue;
+          cx = 0; cy = 0;
+          for (const pt of ring) { cx += pt[0]; cy += pt[1]; }
+          cx /= ring.length; cy /= ring.length;
+        } else if (geom.type === 'MultiPolygon') {
+          const ring = geom.coordinates[0]?.[0];
+          if (!ring || ring.length === 0) continue;
+          cx = 0; cy = 0;
+          for (const pt of ring) { cx += pt[0]; cy += pt[1]; }
+          cx /= ring.length; cy /= ring.length;
+        } else {
+          continue;
+        }
+        const dx = cx - clickLng;
+        const dy = cy - clickLat;
+        const dist = dx * dx + dy * dy;
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestId = f.properties?.parcel_id;
         }
       }
-    });
-    m.on('mouseleave', 'parcel-scores-3d', () => {
-      m.getCanvas().style.cursor = '';
-      if (m.getLayer('parcel-hover')) {
-        m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], '']);
-      }
-    });
-    m.on('mousemove', 'parcel-scores-flat', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
-      m.getCanvas().style.cursor = 'pointer';
-      if (e.features && e.features.length > 0) {
-        const pid = e.features[0].properties?.parcel_id;
-        if (pid && m.getLayer('parcel-hover')) {
-          m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], pid]);
+
+      console.log('[MapView] nearest parcel:', { bestId, bestDist, sqrtDist: Math.sqrt(bestDist) });
+
+      // Select if close enough (~200m in degrees)
+      const maxDist = 0.002;
+      if (bestId && bestDist < maxDist * maxDist) {
+        console.log('[MapView] ✓ selecting parcel:', bestId);
+        onParcelClickRef.current?.(bestId);
+
+        // Remove existing selection marker
+        if (selectionMarkerRef.current) {
+          selectionMarkerRef.current.remove();
+          selectionMarkerRef.current = null;
         }
-      }
-    });
-    m.on('mouseleave', 'parcel-scores-flat', () => {
-      m.getCanvas().style.cursor = '';
-      if (m.getLayer('parcel-hover')) {
-        m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], '']);
+
+        // Find the selected feature to get coordinates and score
+        const selectedFeature = features.find((f: any) => f.properties?.parcel_id === bestId);
+        if (selectedFeature?.geometry?.type === 'Point') {
+          const [lng, lat] = selectedFeature.geometry.coordinates;
+          const score = selectedFeature.properties?.score ?? 50;
+
+          // Score-based color (matches SCORE_COLOR_RAMP tiers)
+          const color = score >= 81 ? '#c62828'   // Prime — Red
+                      : score >= 61 ? '#f57c00'   // High — Orange
+                      : score >= 31 ? '#fdd835'   // Moderate — Yellow
+                      : '#9e9e9e';                 // Low — Grey
+
+          // Create pulsing selection marker
+          const el = document.createElement('div');
+          el.innerHTML = `
+            <div style="
+              width: 60px; height: 60px;
+              border-radius: 50%;
+              background: ${color}33;
+              border: 4px solid ${color};
+              box-shadow: 0 0 20px ${color}88, 0 0 40px ${color}44;
+              animation: parcel-pulse 1.5s ease-in-out infinite;
+              display: flex; align-items: center; justify-content: center;
+              font-size: 14px; font-weight: bold; color: white;
+              text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            ">${Math.round(score)}</div>
+            <style>
+              @keyframes parcel-pulse {
+                0%, 100% { transform: scale(1); opacity: 1; }
+                50% { transform: scale(1.15); opacity: 0.85; }
+              }
+            </style>
+          `;
+          el.style.cursor = 'pointer';
+
+          selectionMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' })
+            .setLngLat([lng, lat])
+            .addTo(m);
+        }
+
+        if (m.getLayer('parcel-highlight')) {
+          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], bestId]);
+        }
+      } else {
+        console.log('[MapView] ✗ too far from any parcel (maxDist²:', maxDist * maxDist, ')');
+        // Clicked too far from any parcel — clear highlight and marker
+        if (selectionMarkerRef.current) {
+          selectionMarkerRef.current.remove();
+          selectionMarkerRef.current = null;
+        }
+        if (m.getLayer('parcel-highlight')) {
+          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], '']);
+        }
       }
     });
 
@@ -224,11 +289,11 @@ export default function MapView({
       if (!m.getSource('draw-rect')) {
         m.addSource('draw-rect', { type: 'geojson', data: emptyRect });
         m.addLayer({
-          id: 'draw-rect-fill', type: 'fill', source: 'draw-rect',
+          id: 'draw-rect-fill', type: 'fill', source: 'draw-rect', slot: SLOT_MIDDLE,
           paint: { 'fill-color': '#3B82F6', 'fill-opacity': 0.15 }
         });
         m.addLayer({
-          id: 'draw-rect-line', type: 'line', source: 'draw-rect',
+          id: 'draw-rect-line', type: 'line', source: 'draw-rect', slot: SLOT_MIDDLE,
           paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
         });
       } else {
@@ -281,22 +346,6 @@ export default function MapView({
             type: 'Feature', properties: {},
             geometry: { type: 'Polygon', coordinates: [rectCoords] }
           });
-<<<<<<< Updated upstream
-        } else {
-          m.addSource('draw-rect', {
-            type: 'geojson',
-            data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [rectCoords] } }
-          });
-          m.addLayer({
-            id: 'draw-rect-fill', type: 'fill', source: 'draw-rect', slot: SLOT_MIDDLE,
-            paint: { 'fill-color': '#3B82F6', 'fill-opacity': 0.1 }
-          });
-          m.addLayer({
-            id: 'draw-rect-line', type: 'line', source: 'draw-rect', slot: SLOT_MIDDLE,
-            paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
-          });
-=======
->>>>>>> Stashed changes
         }
       }
     });
@@ -308,8 +357,11 @@ export default function MapView({
   // ─── Load Parcel Scores ───────────────────────────────
   async function loadParcelScoresForMap(m: mapboxgl.Map, bbox?: string) {
     try {
+      console.log('[MapView] loadParcelScoresForMap called, bbox:', bbox);
       const data = await fetchParcelScores(bbox ? { bbox } : undefined);
       if (!m.getContainer()?.parentNode) return;
+      const featureCount = (data as any).features?.length ?? 0;
+      console.log('[MapView] loaded', featureCount, 'features, source exists:', !!m.getSource('parcel-scores'));
 
       if (m.getSource('parcel-scores')) {
         (m.getSource('parcel-scores') as mapboxgl.GeoJSONSource).setData(data as unknown as GeoJSON.FeatureCollection);
@@ -357,33 +409,32 @@ export default function MapView({
 
         m.addLayer({
           id: 'parcel-hover',
-          type: 'fill-extrusion',
+          type: 'circle',
           source: 'parcel-scores',
-          slot: SLOT_MIDDLE,
+          slot: SLOT_TOP,
           filter: ['==', ['get', 'parcel_id'], ''],
           paint: {
-            'fill-extrusion-color': '#ffffff',
-            'fill-extrusion-height': [
-              'interpolate', ['linear'], ['get', 'score'],
-              0, 6, 50, 26, 100, 81
-            ] as any,
-            'fill-extrusion-base': 0,
-            'fill-extrusion-opacity': 0.25,
-            'fill-extrusion-emissive-strength': 0.8,
+            'circle-radius': 25,
+            'circle-color': 'rgba(255,255,255,0.15)',
+            'circle-stroke-width': 3,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-opacity': 0.8,
           }
         });
 
         m.addLayer({
           id: 'parcel-highlight',
-          type: 'line',
+          type: 'circle',
           source: 'parcel-scores',
+          slot: SLOT_TOP,
           filter: ['==', ['get', 'parcel_id'], ''],
-          slot: SLOT_MIDDLE,
           paint: {
-            'line-color': '#06B6D4',
-            'line-width': 3,
-            'line-opacity': 0.9,
-            'line-emissive-strength': ION_LINE_EMISSIVE_STRENGTH,
+            'circle-radius': 40,
+            'circle-color': SCORE_COLOR_RAMP as any,
+            'circle-opacity': 0.5,
+            'circle-stroke-width': 6,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-opacity': 1,
           }
         });
 
@@ -406,6 +457,9 @@ export default function MapView({
           }
         });
       }
+      // Store features for proximity-based click detection
+      parcelFeaturesRef.current = (data as any).features || [];
+      console.log('[MapView] stored', parcelFeaturesRef.current.length, 'features in ref');
     } catch (e) {
       console.warn('Failed to load parcel scores:', e);
     }
@@ -438,6 +492,14 @@ export default function MapView({
       }
     } catch (e) { console.warn('Layer toggle error:', e); }
   }, [is3DMode, mapReady]);
+
+  // ─── CLEAR SELECTION MARKER WHEN PANEL CLOSES ─────────
+  useEffect(() => {
+    if (!selectedParcelId && selectionMarkerRef.current) {
+      selectionMarkerRef.current.remove();
+      selectionMarkerRef.current = null;
+    }
+  }, [selectedParcelId]);
 
   // ─── LAYER VISIBILITY ─────────────────────────────────
   useEffect(() => {
