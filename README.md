@@ -1,5 +1,5 @@
 <div align="center">
-CityLens
+# CityLens
 </div>
 AI Geomodeling Agent for Canadian Cities
 See the future before you vote on it.
