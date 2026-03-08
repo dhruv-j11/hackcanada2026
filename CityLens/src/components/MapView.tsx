@@ -281,22 +281,6 @@ export default function MapView({
             type: 'Feature', properties: {},
             geometry: { type: 'Polygon', coordinates: [rectCoords] }
           });
-<<<<<<< Updated upstream
-        } else {
-          m.addSource('draw-rect', {
-            type: 'geojson',
-            data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [rectCoords] } }
-          });
-          m.addLayer({
-            id: 'draw-rect-fill', type: 'fill', source: 'draw-rect', slot: SLOT_MIDDLE,
-            paint: { 'fill-color': '#3B82F6', 'fill-opacity': 0.1 }
-          });
-          m.addLayer({
-            id: 'draw-rect-line', type: 'line', source: 'draw-rect', slot: SLOT_MIDDLE,
-            paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
-          });
-=======
->>>>>>> Stashed changes
         }
       }
     });

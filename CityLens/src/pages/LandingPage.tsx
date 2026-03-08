@@ -34,7 +34,7 @@ export default function LandingPage() {
     };
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
-    
+
     // Using a typed handler for mouse events
     const handleMouse = (e: MouseEvent) => { mouse.x = e.clientX; mouse.y = e.clientY; };
     window.addEventListener('mousemove', handleMouse);
@@ -208,7 +208,7 @@ export default function LandingPage() {
 
         <div className="hero-content">
           <div className="hero-badge">
-            <svg viewBox="0 0 16 16" fill="none"><path d="M8 1l1.5 3.2L13 5l-2.5 2.5.5 3.5L8 9.5 4.8 11l.7-3.5L3 5l3.5-.8L8 1z" fill="currentColor"/></svg>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 1l1.5 3.2L13 5l-2.5 2.5.5 3.5L8 9.5 4.8 11l.7-3.5L3 5l3.5-.8L8 1z" fill="currentColor" /></svg>
             AI-Powered Urban Planning
           </div>
 
@@ -225,10 +225,10 @@ export default function LandingPage() {
           <div className="hero-actions">
             <button onClick={() => navigate('/city/waterloo')} className="btn-primary">
               Try CityLens
-              <svg viewBox="0 0 18 18" fill="none"><path d="M3.75 9h10.5M9.75 4.5L14.25 9l-4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 18 18" fill="none"><path d="M3.75 9h10.5M9.75 4.5L14.25 9l-4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
             <button onClick={() => setShowVideo(true)} className="btn-secondary">
-              <svg viewBox="0 0 18 18" fill="none" width="16" height="16"><polygon points="6,3 15,9 6,15" fill="currentColor"/></svg>
+              <svg viewBox="0 0 18 18" fill="none" width="16" height="16"><polygon points="6,3 15,9 6,15" fill="currentColor" /></svg>
               Watch Demo
             </button>
           </div>
@@ -266,7 +266,7 @@ export default function LandingPage() {
         <div className="features-grid">
           <div className="feature-card" data-delay="0">
             <div className="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" stroke="currentColor" strokeWidth="2"/><circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="2" /></svg>
             </div>
             <h3>Zoning Simulation</h3>
             <p>Instantly visualize the impact of rezoning decisions on neighborhoods, density, and land use patterns.</p>
@@ -274,7 +274,7 @@ export default function LandingPage() {
 
           <div className="feature-card" data-delay="100">
             <div className="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l3-9 4 18 3-9h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l3-9 4 18 3-9h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
             <h3>Density Analysis</h3>
             <p>Model population growth, housing demand, and infrastructure load across any area of your city.</p>
@@ -282,7 +282,7 @@ export default function LandingPage() {
 
           <div className="feature-card" data-delay="200">
             <div className="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2" /><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2" /><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2" /><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2" /></svg>
             </div>
             <h3>Transit Planning</h3>
             <p>Simulate new transit routes, stops, and connections to optimize commute times and accessibility.</p>
@@ -290,7 +290,7 @@ export default function LandingPage() {
 
           <div className="feature-card" data-delay="300">
             <div className="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" strokeWidth="2"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke="currentColor" strokeWidth="2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" strokeWidth="2" /><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke="currentColor" strokeWidth="2" /></svg>
             </div>
             <h3>3D Visualization</h3>
             <p>See proposed changes rendered in real-time 3D, giving stakeholders a tangible preview of the future.</p>
@@ -298,7 +298,7 @@ export default function LandingPage() {
 
           <div className="feature-card" data-delay="400">
             <div className="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" stroke="currentColor" strokeWidth="2"/><path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" stroke="currentColor" strokeWidth="2" /><path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
             </div>
             <h3>AI Recommendations</h3>
             <p>Get intelligent suggestions for optimal land use based on demographic data, economic trends, and environmental impact.</p>
@@ -306,7 +306,7 @@ export default function LandingPage() {
 
           <div className="feature-card" data-delay="500">
             <div className="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2"/><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" /><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2" /></svg>
             </div>
             <h3>Community Input</h3>
             <p>Let citizens participate in planning by submitting and voting on proposals through a simple, intuitive interface.</p>
@@ -318,7 +318,7 @@ export default function LandingPage() {
       <section className="section section-how" id="how">
         <div className="section-header" style={{ margin: '0 auto 80px', textAlign: 'center' }}>
           <div className="section-label" style={{ justifyContent: 'center' }}>Process</div>
-          <h2>Three steps to a<br/>smarter city</h2>
+          <h2>Three steps to a<br />smarter city</h2>
           <p style={{ margin: '20px auto 0' }}>From natural language to actionable urban insights in seconds.</p>
         </div>
 
@@ -345,12 +345,12 @@ export default function LandingPage() {
       <section className="section section-cta" id="cta">
         <div className="cta-glow" />
         <div className="cta-box">
-          <h2>Start exploring<br/>your city today</h2>
+          <h2>Start exploring<br />your city today</h2>
           <p>Join thousands of planners and citizens already reshaping urban futures with CityLens.</p>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
             <button onClick={() => navigate('/city/waterloo')} className="btn-primary">
               Try CityLens
-              <svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M3.75 9h10.5M9.75 4.5L14.25 9l-4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M3.75 9h10.5M9.75 4.5L14.25 9l-4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
             <button className="btn-secondary">Join the Waitlist</button>
           </div>
@@ -359,7 +359,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="footer">
-        <span>&copy; 2026 CityLens &middot; Built at Hack Canada 2026</span>
+        <span>&copy; 2026 CityLens &middot; Built at Hack Canada 2026 &middot; <small>By Jaineel Patel, Sajan Paventhan, Bhavya Patel, Dhruv Joshi</small> </span>
         <div className="footer-links">
           <a href="#">Privacy</a>
           <a href="#">Terms</a>
@@ -371,16 +371,16 @@ export default function LandingPage() {
       {showVideo && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
           <div className="relative w-full max-w-5xl aspect-video bg-black rounded-xl overflow-hidden border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <button 
+            <button
               onClick={() => setShowVideo(false)}
               className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center bg-black/50 hover:bg-white/20 text-white rounded-full transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
-            <video 
-              src="/demovideo.mp4" 
-              autoPlay 
-              controls 
+            <video
+              src="/demovideo.mp4"
+              autoPlay
+              controls
               className="w-full h-full object-cover"
             />
           </div>
