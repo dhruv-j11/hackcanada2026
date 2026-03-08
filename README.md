@@ -1,6 +1,5 @@
-<div align="center">
-# CityLens
-</div>
+# citylens.ai
+
 AI Geomodeling Agent for Canadian Cities
 See the future before you vote on it.
 Hack Canada 2026 · Waterloo, Ontario
