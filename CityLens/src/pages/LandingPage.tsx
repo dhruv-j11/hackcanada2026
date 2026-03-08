@@ -11,10 +11,10 @@ function StatCounter({ end, suffix, label }: { end: number; suffix: string; labe
   const { count, ref } = useCountUp(end, 2200);
   return (
     <div ref={ref} className="text-center">
-      <div className="text-[56px] md:text-[72px] font-extrabold tracking-tight text-white leading-none">
+      <div className="text-[56px] md:text-[72px] font-extrabold tracking-tight text-[#0F172A] leading-none">
         {count}<span className="text-[#3B82F6]">{suffix}</span>
       </div>
-      <p className="mt-3 text-[15px] text-[#94A3B8] max-w-[220px] mx-auto">{label}</p>
+      <p className="mt-3 text-[15px] text-[#64748B] max-w-[220px] mx-auto">{label}</p>
     </div>
   );
 }
@@ -95,7 +95,7 @@ export default function LandingPage() {
       <Navbar />
 
       {/* ════════ SECTION 1 — HERO ════════ */}
-      <section className="relative min-h-screen flex items-center justify-center bg-gradient-to-b from-[#060E1A] via-[#0A1628] to-[#0F2035] overflow-hidden">
+      <section id="hero" className="relative min-h-screen flex items-center justify-center bg-gradient-to-b from-[#060E1A] via-[#0A1628] to-[#0F2035] overflow-hidden">
         {/* Animated grid background */}
         <div className="absolute inset-0 grid-bg animate-grid opacity-60" />
         {/* Radial highlight */}
@@ -127,7 +127,10 @@ export default function LandingPage() {
               Try CityLens
               <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </button>
-            <button className="flex items-center gap-2 px-7 py-3.5 border border-[#1E3050] text-[#94A3B8] hover:text-white hover:border-[#3B82F6]/40 rounded-xl transition-all text-[15px]">
+            <button
+              onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+              className="flex items-center gap-2 px-7 py-3.5 border border-[#1E3050] text-[#94A3B8] hover:text-white hover:border-[#3B82F6]/40 rounded-xl transition-all text-[15px]"
+            >
               <Play className="w-4 h-4" />
               Watch Demo
             </button>
@@ -150,7 +153,7 @@ export default function LandingPage() {
       </section>
 
       {/* ════════ SECTION 2 — PROBLEM ════════ */}
-      <section className="relative bg-white py-28 md:py-36">
+      <section id="problem" className="relative bg-white py-28 md:py-36">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="scroll-reveal text-[32px] md:text-[44px] font-bold text-[#0F172A] tracking-[-0.02em] leading-tight">
@@ -185,7 +188,7 @@ export default function LandingPage() {
       </section>
 
       {/* ════════ SECTION 3 — PRODUCT DEMO ════════ */}
-      <section className="relative bg-[#0A1628] py-28 md:py-36 overflow-hidden">
+      <section id="demo" className="relative bg-[#0A1628] py-28 md:py-36 overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30" />
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-white to-transparent" />
 
@@ -257,7 +260,7 @@ export default function LandingPage() {
       </section>
 
       {/* ════════ SECTION 4 — STATISTICS ════════ */}
-      <section className="relative bg-white py-28 md:py-36">
+      <section id="stats" className="relative bg-white py-28 md:py-36">
         <div className="max-w-5xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-8">
             <StatCounter end={70} suffix="%" label="of urban land is underutilized" />
@@ -268,7 +271,7 @@ export default function LandingPage() {
       </section>
 
       {/* ════════ SECTION 5 — FEATURE GRID ════════ */}
-      <section className="relative bg-[#0A1628] py-28 md:py-36 overflow-hidden">
+      <section id="features" className="relative bg-[#0A1628] py-28 md:py-36 overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#3B82F6]/4 rounded-full blur-[150px] pointer-events-none" />
 
@@ -371,7 +374,10 @@ export default function LandingPage() {
               Try CityLens
               <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </button>
-            <button className="px-8 py-4 border border-[#1E3050] text-[#94A3B8] hover:text-white hover:border-[#3B82F6]/40 rounded-xl transition-all text-[15px]">
+            <button
+              onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+              className="px-8 py-4 border border-[#1E3050] text-[#94A3B8] hover:text-white hover:border-[#3B82F6]/40 rounded-xl transition-all text-[15px]"
+            >
               Join the Waitlist
             </button>
           </div>

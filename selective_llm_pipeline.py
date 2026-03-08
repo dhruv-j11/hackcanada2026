@@ -27,12 +27,16 @@ you might go from 8,000 total permits → 47 within 500m → 12 after filtering
 to recent + significant → ~1,200 tokens of structured context.
 """
 
+import os
 import requests
 import json
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+
+from dotenv import load_dotenv
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +336,7 @@ def example_llm_integration():
     """
     import google.generativeai as genai
 
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
     model = genai.GenerativeModel("gemini-2.0-flash")
     response = model.generate_content(
         f"You are CityLens, an urban planning assistant for Waterloo, Ontario. "

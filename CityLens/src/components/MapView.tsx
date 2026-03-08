@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { MAPBOX_TOKEN, INITIAL_VIEW_STATE, TARGET_VIEW_STATE } from '../utils/mapConfig';
+import { MAPBOX_TOKEN, INITIAL_VIEW_STATE, DARK_STYLE, LIGHT_STYLE, SCORE_COLOR_RAMP, buildingColor } from '../utils/mapConfig';
 import { ionLineGeoJSON, ionStationsGeoJSON } from '../data/ionRoute';
 import { fetchParcelScores } from '../services/apiService';
 import type { IonSimulationResult } from '../services/apiService';
@@ -30,17 +30,7 @@ interface MapViewProps {
   simulationResult?: SimulationResult | null;
 }
 
-const DARK_STYLE = 'mapbox://styles/mapbox/dark-v11';
-const LIGHT_STYLE = 'mapbox://styles/mapbox/light-v11';
 
-// Score → color interpolation from mapbox_config.json
-const SCORE_COLOR_RAMP: unknown[] = [
-  'interpolate', ['linear'], ['get', 'score'],
-  0, '#9e9e9e', 30, '#bdbdbd',
-  31, '#fff176', 60, '#fdd835',
-  61, '#ffb74d', 80, '#f57c00',
-  81, '#ef5350', 100, '#c62828'
-];
 
 export default function MapView({
   is3DMode, isLightMode, visibleLayers, resetTrigger,
@@ -110,6 +100,19 @@ export default function MapView({
           paint: { 'line-color': '#333333', 'line-width': 0.5, 'line-opacity': 0.4 }
         });
 
+        // Highlight layer for selected parcel
+        m.addLayer({
+          id: 'parcel-highlight',
+          type: 'line',
+          source: 'parcel-scores',
+          filter: ['==', ['get', 'parcel_id'], ''],
+          paint: {
+            'line-color': '#06B6D4',
+            'line-width': 3,
+            'line-opacity': 0.9,
+          }
+        });
+
         // Score labels at high zoom
         m.addLayer({
           id: 'parcel-score-labels',
@@ -157,13 +160,7 @@ export default function MapView({
         type: 'fill-extrusion',
         minzoom: 12,
         paint: {
-          'fill-extrusion-color': [
-            'interpolate', ['linear'], ['get', 'height'],
-            0, light ? '#e2e8f0' : '#0f1d32',
-            50, light ? '#cbd5e1' : '#1a2d4a',
-            100, light ? '#94a3b8' : '#243b5c',
-            200, light ? '#64748b' : '#2e4a6e'
-          ],
+          'fill-extrusion-color': buildingColor(light) as any,
           'fill-extrusion-height': [
             'interpolate', ['linear'], ['zoom'],
             12, 0, 12.5, ['get', 'height']
@@ -227,7 +224,7 @@ export default function MapView({
     });
 
     m.on('load', () => {
-      m.flyTo({ ...TARGET_VIEW_STATE, duration: 2000, essential: true });
+      // No flyTo needed — INITIAL_VIEW_STATE already has correct 3D camera
     });
 
     // Parcel click handler
@@ -236,6 +233,10 @@ export default function MapView({
       const feature = e.features?.[0];
       if (feature?.properties?.parcel_id) {
         onParcelClick?.(feature.properties.parcel_id);
+        // Highlight clicked parcel
+        if (m.getLayer('parcel-highlight')) {
+          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
+        }
         e.originalEvent.stopPropagation();
       }
     });
@@ -244,14 +245,22 @@ export default function MapView({
       const feature = e.features?.[0];
       if (feature?.properties?.parcel_id) {
         onParcelClick?.(feature.properties.parcel_id);
+        if (m.getLayer('parcel-highlight')) {
+          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
+        }
         e.originalEvent.stopPropagation();
       }
     });
 
-    // General click (for ION sim mode)
+    // General click (for ION sim mode + clear highlight)
     m.on('click', (e) => {
       if (ionSimModeRef.current) {
         onMapClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+      }
+      // Clear highlight when clicking empty space
+      const features = m.queryRenderedFeatures(e.point, { layers: ['parcel-scores-3d', 'parcel-scores-flat'] });
+      if (!features.length && m.getLayer('parcel-highlight')) {
+        m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], '']);
       }
     });
 
@@ -374,7 +383,7 @@ export default function MapView({
   // ─── RESET VIEW ───────────────────────────────────────
   useEffect(() => {
     if (!map.current || !mapReady || resetTrigger === 0) return;
-    map.current.flyTo({ ...TARGET_VIEW_STATE, duration: 1500, essential: true });
+    map.current.flyTo({ ...INITIAL_VIEW_STATE, duration: 1500, essential: true });
   }, [resetTrigger, mapReady]);
 
   // ─── ION SIMULATION OVERLAY ───────────────────────────

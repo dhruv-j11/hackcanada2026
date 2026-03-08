@@ -9,7 +9,6 @@ import ParcelDetailPanel from '../components/ParcelDetailPanel';
 import AreaAnalysisPanel from '../components/AreaAnalysisPanel';
 import CategorySelector from '../components/CategorySelector';
 import IonStationSimulator from '../components/IonStationSimulator';
-import DistrictPanel from '../components/DistrictPanel';
 import ScoreLegend from '../components/ScoreLegend';
 import { simulateZoningChange } from '../services/geminiService';
 import type { SimulationResult } from '../services/geminiService';
@@ -42,7 +41,6 @@ export default function MapDashboard() {
   const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
   const [drawnBbox, setDrawnBbox] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [districtPanelOpen, setDistrictPanelOpen] = useState(false);
 
   // ION sim state
   const [ionSimMode, setIonSimMode] = useState(false);
@@ -169,8 +167,6 @@ export default function MapDashboard() {
           setDrawAreaMode(!drawAreaMode);
           if (!drawAreaMode) setDrawnBbox(null);
         }}
-        districtPanelOpen={districtPanelOpen}
-        onToggleDistrictPanel={() => setDistrictPanelOpen(!districtPanelOpen)}
       />
 
       {/* Score Legend */}
@@ -212,11 +208,7 @@ export default function MapDashboard() {
         onParcelClick={handleParcelClick}
       />
 
-      {/* District Panel */}
-      <DistrictPanel
-        isOpen={districtPanelOpen}
-        onClose={() => setDistrictPanelOpen(false)}
-      />
+
 
       <SettingsModal
         isOpen={isSettingsOpen}

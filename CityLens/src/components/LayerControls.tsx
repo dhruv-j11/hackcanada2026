@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Layers, Box, Sun, Maximize, Glasses, Settings, Train, SquareDashedMousePointer, Map } from 'lucide-react';
+import { Layers, Box, Sun, Maximize, Glasses, Settings, Train, SquareDashedMousePointer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface LayerControlsProps {
@@ -20,13 +20,11 @@ interface LayerControlsProps {
   onToggleIonSim: () => void;
   drawAreaMode: boolean;
   onToggleDrawArea: () => void;
-  districtPanelOpen: boolean;
-  onToggleDistrictPanel: () => void;
 }
 
 export default function LayerControls({
   is3DMode, onToggle3D, isLightMode, onToggleLight, visibleLayers, onToggleLayer, onReset, onOpenSettings,
-  ionSimMode, onToggleIonSim, drawAreaMode, onToggleDrawArea, districtPanelOpen, onToggleDistrictPanel
+  ionSimMode, onToggleIonSim, drawAreaMode, onToggleDrawArea
 }: LayerControlsProps) {
   const [layersOpen, setLayersOpen] = useState(false);
   const navigate = useNavigate();
@@ -117,14 +115,6 @@ export default function LayerControls({
         <SquareDashedMousePointer className="w-5 h-5" />
       </button>
 
-      {/* Districts Panel */}
-      <button
-        onClick={onToggleDistrictPanel}
-        className={btnClass(districtPanelOpen)}
-        title="Planning Districts"
-      >
-        <Map className="w-5 h-5" />
-      </button>
 
       <div className="w-9 my-0.5 border-t border-[#1E3050]"></div>
 

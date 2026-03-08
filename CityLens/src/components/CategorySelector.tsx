@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { rescoreByCategory } from '../services/apiService';
 
 interface CategorySelectorProps {
@@ -17,23 +17,28 @@ const CATEGORIES = [
 
 export default function CategorySelector({ activeCategory, onCategoryChange, onRefreshScores }: CategorySelectorProps) {
   const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSelect = async (catId: string) => {
+  const handleSelect = (catId: string) => {
     if (loading) return;
     if (activeCategory === catId) {
       onCategoryChange(null);
       return;
     }
-    setLoading(true);
-    try {
-      await rescoreByCategory(catId);
-      onCategoryChange(catId);
-      onRefreshScores();
-    } catch (e) {
-      console.error('Rescore failed:', e);
-    } finally {
-      setLoading(false);
-    }
+    // Debounce: clear previous timer, wait 300ms
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        await rescoreByCategory(catId);
+        onCategoryChange(catId);
+        onRefreshScores();
+      } catch (e) {
+        console.error('Rescore failed:', e);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
   };
 
   return (
