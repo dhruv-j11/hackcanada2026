@@ -5,7 +5,7 @@ const isLocal = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostn
   || window.location.hostname.startsWith('10.');
 const API_BASE = isLocal
   ? `http://localhost:8000`
-  : 'http://155.138.136.112:8000';
+  : 'https://155.138.136.112';
 
 // ─── Type Definitions ──────────────────────────────────────────
 
