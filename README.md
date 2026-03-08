@@ -1,7 +1,8 @@
 # citylens.ai
 
+
 AI Geomodeling Agent for Canadian Cities
-See the future before you vote on it.
+
 Hack Canada 2026 · Waterloo, Ontario
 
 Canada has the longest construction development approval time in North America, an embarrassing statistic for a first-world country. We need 5.8 million new homes by 2030, and these numbers are catching up to us. Worst of all? The mass public barely gets a say on what developments they really want.
