@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import MapView from '../components/MapView';
 import CityBadge from '../components/CityBadge';
 import LayerControls from '../components/LayerControls';
@@ -14,6 +14,7 @@ import { simulateZoningChange } from '../services/geminiService';
 import type { SimulationResult } from '../services/geminiService';
 import { speakNarration } from '../services/elevenLabsService';
 import type { IonSimulationResult } from '../services/apiService';
+import { rescoreByCategory } from '../services/apiService';
 
 export default function MapDashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -40,7 +41,7 @@ export default function MapDashboard() {
   // Panel state
   const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
   const [drawnBbox, setDrawnBbox] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>('residential');
 
   // ION sim state
   const [ionSimMode, setIonSimMode] = useState(false);
@@ -52,6 +53,16 @@ export default function MapDashboard() {
 
   // Refresh key to force MapView to re-fetch scores after category change
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasInitialRescore = useRef(false);
+
+  // Initial rescore with residential weights on mount
+  useEffect(() => {
+    if (hasInitialRescore.current) return;
+    hasInitialRescore.current = true;
+    rescoreByCategory('residential')
+      .then(() => setRefreshKey(prev => prev + 1))
+      .catch(e => console.error('Initial residential rescore failed:', e));
+  }, []);
 
   // Show query bar delayed
   useEffect(() => {
@@ -129,6 +140,7 @@ export default function MapDashboard() {
         onMapClick={handleMapClick}
         ionSimResult={ionSimResult}
         ionSimMode={ionSimMode}
+        ionSimClickedLocation={ionSimClickedLocation}
         drawAreaMode={drawAreaMode}
         onBboxDraw={handleBboxDraw}
         showSimulation={!!simResult && isResultsOpen}

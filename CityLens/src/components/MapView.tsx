@@ -30,6 +30,7 @@ interface MapViewProps {
   onMapClick?: (lngLat: { lng: number; lat: number }) => void;
   ionSimResult?: IonSimulationResult | null;
   ionSimMode?: boolean;
+  ionSimClickedLocation?: { lat: number; lng: number } | null;
   drawAreaMode?: boolean;
   onBboxDraw?: (bbox: string) => void;
   showSimulation?: boolean;
@@ -38,13 +39,14 @@ interface MapViewProps {
 
 export default function MapView({
   is3DMode, isLightMode, visibleLayers, resetTrigger,
-  onParcelClick, onMapClick, ionSimResult, ionSimMode, drawAreaMode, onBboxDraw,
+  onParcelClick, onMapClick, ionSimResult, ionSimMode, ionSimClickedLocation, drawAreaMode, onBboxDraw,
   showSimulation, simulationResult
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const drawStartRef = useRef<mapboxgl.LngLat | null>(null);
+  const ionMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   // Refs for values used in callbacks (avoids stale closure)
   const isLightModeRef = useRef(isLightMode);
@@ -208,17 +210,58 @@ export default function MapView({
     });
 
     // ── Bbox draw (for area analysis) ──
+    const emptyRect: GeoJSON.Feature = {
+      type: 'Feature', properties: {},
+      geometry: { type: 'Polygon', coordinates: [[[0,0],[0,0],[0,0],[0,0],[0,0]]] }
+    };
+
     m.on('mousedown', (e: mapboxgl.MapMouseEvent) => {
       if (!drawAreaModeRef.current) return;
       drawStartRef.current = e.lngLat;
       m.getCanvas().style.cursor = 'crosshair';
+
+      // Eagerly create draw-rect source + layers so mousemove can update
+      if (!m.getSource('draw-rect')) {
+        m.addSource('draw-rect', { type: 'geojson', data: emptyRect });
+        m.addLayer({
+          id: 'draw-rect-fill', type: 'fill', source: 'draw-rect',
+          paint: { 'fill-color': '#3B82F6', 'fill-opacity': 0.15 }
+        });
+        m.addLayer({
+          id: 'draw-rect-line', type: 'line', source: 'draw-rect',
+          paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
+        });
+      } else {
+        (m.getSource('draw-rect') as mapboxgl.GeoJSONSource).setData(emptyRect);
+      }
     });
+
+    // Live rectangle preview while dragging
+    m.on('mousemove', (e: mapboxgl.MapMouseEvent) => {
+      if (!drawAreaModeRef.current || !drawStartRef.current) return;
+      const start = drawStartRef.current;
+      const cur = e.lngLat;
+      const minLon = Math.min(start.lng, cur.lng);
+      const minLat = Math.min(start.lat, cur.lat);
+      const maxLon = Math.max(start.lng, cur.lng);
+      const maxLat = Math.max(start.lat, cur.lat);
+      const coords: [number, number][] = [
+        [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]
+      ];
+      if (m.getSource('draw-rect')) {
+        (m.getSource('draw-rect') as mapboxgl.GeoJSONSource).setData({
+          type: 'Feature', properties: {},
+          geometry: { type: 'Polygon', coordinates: [coords] }
+        });
+      }
+    });
+
     m.on('mouseup', (e: mapboxgl.MapMouseEvent) => {
       if (!drawAreaModeRef.current || !drawStartRef.current) return;
       const start = drawStartRef.current;
       const end = e.lngLat;
       drawStartRef.current = null;
-      m.getCanvas().style.cursor = '';
+      m.getCanvas().style.cursor = 'crosshair';
 
       const minLon = Math.min(start.lng, end.lng);
       const minLat = Math.min(start.lat, end.lat);
@@ -229,6 +272,7 @@ export default function MapView({
         const bboxStr = `${minLon},${minLat},${maxLon},${maxLat}`;
         onBboxDrawRef.current?.(bboxStr);
 
+        // Update final rect
         const rectCoords: [number, number][] = [
           [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]
         ];
@@ -237,6 +281,7 @@ export default function MapView({
             type: 'Feature', properties: {},
             geometry: { type: 'Polygon', coordinates: [rectCoords] }
           });
+<<<<<<< Updated upstream
         } else {
           m.addSource('draw-rect', {
             type: 'geojson',
@@ -250,6 +295,8 @@ export default function MapView({
             id: 'draw-rect-line', type: 'line', source: 'draw-rect', slot: SLOT_MIDDLE,
             paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
           });
+=======
+>>>>>>> Stashed changes
         }
       }
     });
@@ -554,11 +601,46 @@ export default function MapView({
     } else {
       map.current.getCanvas().style.cursor = '';
       map.current.dragPan.enable();
+      drawStartRef.current = null;
       if (map.current.getLayer('draw-rect-fill')) map.current.removeLayer('draw-rect-fill');
       if (map.current.getLayer('draw-rect-line')) map.current.removeLayer('draw-rect-line');
       if (map.current.getSource('draw-rect')) map.current.removeSource('draw-rect');
     }
   }, [drawAreaMode, mapReady]);
+
+  // ─── ION SIMULATION STATION MARKER ──────────────────
+  useEffect(() => {
+    // Remove old marker
+    if (ionMarkerRef.current) {
+      ionMarkerRef.current.remove();
+      ionMarkerRef.current = null;
+    }
+    if (!map.current || !mapReady || !ionSimClickedLocation) return;
+
+    // Create a pulsing cyan marker
+    const el = document.createElement('div');
+    el.innerHTML = `
+      <div style="position:relative;width:32px;height:32px;">
+        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(6,182,212,0.25);animation:ion-pulse 1.5s ease-out infinite;"></div>
+        <div style="position:absolute;inset:6px;border-radius:50%;background:#06B6D4;border:2px solid #fff;box-shadow:0 0 12px rgba(6,182,212,0.6);"></div>
+        <svg style="position:absolute;top:7px;left:7px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M12 3v18"/><path d="M4 9h16"/><path d="M4 15h16"/>
+        </svg>
+      </div>
+    `;
+    // Add pulse keyframes if not already present
+    if (!document.getElementById('ion-pulse-style')) {
+      const style = document.createElement('style');
+      style.id = 'ion-pulse-style';
+      style.textContent = `@keyframes ion-pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }`;
+      document.head.appendChild(style);
+    }
+
+    const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([ionSimClickedLocation.lng, ionSimClickedLocation.lat])
+      .addTo(map.current);
+    ionMarkerRef.current = marker;
+  }, [ionSimClickedLocation, mapReady]);
 
   return <div ref={mapContainer} className="absolute inset-0 w-full h-full bg-[#0A1628]" />;
 }
