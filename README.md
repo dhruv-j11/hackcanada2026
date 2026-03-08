@@ -1,20 +1,11 @@
 <div align="center">
-
-# 🔍 CityLens
-
-### AI Urban Planning Simulator for Canadian Cities
-
-**See the future before you vote on it.**
-
-*Built at Hack Canada 2026 · Waterloo, Ontario*
-
----
-
-**Canada needs 5.8 million new homes by 2030. The bottleneck isn't builders. It's decisions.**
-
+CityLens
 </div>
+AI Geomodeling Agent for Canadian Cities
+See the future before you vote on it.
+Hack Canada 2026 · Waterloo, Ontario
 
----
+Canada has the longest construction development approval time in North America, an embarrassing statistic for a first-world country. We need 5.8 million new homes by 2030, and these numbers are catching up to us. Worst of all? The mass public barely gets a say on what developments they really want.
 
 ## The Problem
 
@@ -34,11 +25,11 @@ Every zoning change in Canada triggers years of debate, millions in consulting f
 
 CityLens is an AI-powered urban planning simulator that scores every parcel of land in Waterloo on a **0–100 development readiness scale**, then lets anyone — planners, councillors, citizens, developers — explore what their city could become.
 
-Ask a question. See the future.
+Type a question in plain English. See the future.
 
-> *"What happens if we allow 6-storey mixed use along the ION corridor?"*
+> *"Build 6-storey housing on King Street."*
 
-CityLens responds with scored parcels on a 3D map, estimated housing capacity, population impact, tax revenue projections, transit ridership changes, heritage constraints, and ward-level councillor briefs — all grounded in **real open data** from the city you're standing in.
+CityLens identifies the parcels, calculates the development based on real lot boundaries and zoning data, and generates the structures right on the map. Select any corridor and instantly see estimated housing capacity, population impact, tax revenue projections, transit ridership changes, heritage constraints, and ward-level councillor briefs — all grounded in **real open data** from the city you're standing in.
 
 This isn't hypothetical. The backend is running right now with **17,717 scored parcels** covering the entire City of Waterloo.
 
@@ -46,34 +37,37 @@ This isn't hypothetical. The backend is running right now with **17,717 scored p
 
 ## Features
 
-### 🎯 Parcel Opportunity Scoring
+### Parcel Opportunity Scoring
 Every parcel gets a 0–100 score based on 9 engineered spatial features: distance to ION LRT stations, unused floor-area ratio, lot size, building age, zoning-use mismatch, walkability, proximity to parks, proximity to major roads, and zoning density class. Scores are categorized into four tiers — Low, Moderate, High, and Prime Opportunity — and rendered as a colour-gradient heatmap directly on the map.
 
-### 🔄 Category-Aware Rescoring
+### Natural Language City Building
+Type a plain English prompt — *"Build 6-storey housing on King Street"* — and CityLens identifies the relevant parcels, calculates what that development would look like based on real lot boundaries and zoning data, and generates the 3D structures right on the map. One sentence in, a simulation of the future out. No GIS training, no planning degree, no consulting contract. Just a question and an answer you can see.
+
+### Category-Aware Rescoring
 Five development profiles — residential, commercial, industrial, mixed-use, and institutional — each apply a different weight vector to the scoring model. When a user types a natural language query, Gemini classifies it into the right category, the backend rescores all 17,717 parcels, and the map transforms to reflect what matters for that type of development. What's prime for student housing is different from what's prime for a grocery store.
 
-### 🧬 Development Archetype Clustering
+### Development Archetype Clustering
 K-Means clustering (k=6) identifies natural groupings across all parcels and labels them with descriptive archetype names: **Transit-Adjacent Sleepers** (close to ION, lots of unused density), **Suburban Holdouts** (large lots far from transit), **Zoning Mismatch** (parcels used below their zoned potential), and more. Planners get a vocabulary for neighbourhood patterns, not just individual scores.
 
-### 🏛️ Ward & Councillor Integration
+### Ward & Councillor Integration
 Every parcel knows its ward and sitting councillor. Select an area on the map and generate a **Community Development Brief** — a structured summary with total development capacity, estimated population increase, tax revenue, ION ridership impact, heritage constraints, and the councillors who represent that area. This is the document a citizen hands to their councillor.
 
-### 🏗️ "Build This Block" Aggregate Analysis
+### "Build This Block" Aggregate Analysis
 Draw a rectangle on the map and get corridor-level planning intelligence: total parcels, tier and cluster breakdowns, estimated additional housing units, projected population increase, annual tax revenue, daily transit ridership impact, and the top 10 highest-opportunity parcels. This is what makes CityLens a planning tool, not just a heatmap.
 
-### 🚉 Hypothetical ION Station Simulator
+### Hypothetical ION Station Simulator
 Drop a new ION LRT station anywhere on the map. The system recalculates distance-to-station for all 17,717 parcels, rescores everything, and returns a before/after comparison — tier changes, most-improved parcels, and a full delta heatmap. This makes the value of transit investment tangible in a single click.
 
-### 🏚️ Heritage Collision Detection
+### Heritage Collision Detection
 All 320 heritage buildings in Waterloo are buffered by 50 metres. Any high-scoring parcel within that radius gets flagged with the heritage property name and a note that development may require a Heritage Impact Assessment. A small feature to build, but it shows the tool understands real planning constraints.
 
-### 📊 Census-Grounded Demographic Analysis
+### Census-Grounded Demographic Analysis
 A custom parser extracts structured data from the City of Waterloo's 200-page 2021 Census Profile PDF — population by age, household sizes, dwelling types, tenure, income, industry, education, immigration, and core housing need — for 18 planning districts. When Gemini analyzes the impact of a proposed zoning change, it works with the **real demographics of that neighbourhood**, not generic assumptions.
 
-### 🔓 Enhanced Explainer: "Why Not Here?"
+### Enhanced Explainer: "Why Not Here?"
 Low-scoring parcels explain what's holding them back and suggest what would fix it: *"If an ION station were built within 400m, this parcel's score would increase by approximately 22 points."* High-scoring parcels highlight strengths and flag risks. Every explanation includes ward, councillor, heritage status, cluster archetype, and district context.
 
-### 🤖 Gemini AI Impact Analysis
+### Gemini AI Impact Analysis
 Propose a change — *"Replace this apartment with a grocery store"* — and Gemini generates a multi-dimensional impact analysis grounded in real census demographics: population displacement, housing supply loss, employment creation, tax revenue change, and neighbourhood character. The 3-stage LLM pipeline (spatial filter → attribute rank → token-budgeted serialization) ensures efficient token usage.
 
 ---
@@ -110,32 +104,6 @@ Propose a change — *"Replace this apartment with a grocery store"* — and Gem
 | **Data** | 10 ArcGIS REST datasets, 2021 Census PDF (custom-parsed), cached as GeoJSON |
 | **Voice** | ElevenLabs (bidirectional — speak queries, hear results) |
 
----
-
-## Data Pipeline
-
-```
-ArcGIS REST API (10 datasets)          2021 Census PDF (200 pages)
-         │                                        │
-    data_ingest.py                         census_parser.py
-    (fetch + cache GeoJSON)              (anchor-based extraction)
-         │                                        │
-         ▼                                        ▼
-    feature_engineering.py               waterloo_census_2021.json
-    (9 spatial features per parcel)       (18 districts, 27 sections each)
-         │                                        │
-         ▼                                        │
-      scorer.py ◄─────────────────────────────────┘
-    (weighted sum / KMeans / XGBoost)
-         │
-         ▼
-       api.py
-    (14 endpoints, GeoJSON responses)
-         │
-         ▼
-    React + Mapbox GL JS
-    (3D scored parcel map)
-```
 
 ---
 
@@ -160,58 +128,6 @@ ArcGIS REST API (10 datasets)          2021 Census PDF (200 pages)
 
 ---
 
-## Quick Start
-
-```bash
-# Clone and install
-git clone https://github.com/yourteam/zonewise.git
-cd zonewise
-pip install -r requirements.txt
-
-# Fetch and cache all open data (first run only)
-python data_ingest.py
-
-# Parse census PDF (first run only)
-python census_parser.py --pdf 2021-census-profiles-city-of-waterloo.pdf
-
-# Start the backend
-uvicorn api:app --reload --host 0.0.0.0 --port 8000
-
-# Backend is now serving 17,717 scored parcels at http://localhost:8000
-```
-
-Set `GEMINI_API_KEY` environment variable to enable AI-powered impact analysis.
-
----
-
-## Project Structure
-
-```
-zonewise/
-├── api.py                      # FastAPI app — 14 endpoints
-├── data_ingest.py              # Fetches + caches 10 datasets from ArcGIS
-├── feature_engineering.py      # Engineers 9 spatial features per parcel
-├── scorer.py                   # Weighted sum + KMeans + XGBoost scoring
-├── census_parser.py            # Extracts structured data from 200-page Census PDF
-├── selective_llm_pipeline.py   # 3-stage token-efficient LLM context builder
-├── mapbox_config.json          # Ready-to-use Mapbox GL JS layer configs
-├── requirements.txt            # Python dependencies
-├── cache/                      # Auto-generated cached GeoJSON + census JSON
-│   ├── parcel_cache.geojson
-│   ├── building_permits_cache.geojson
-│   ├── buildings_cache.geojson
-│   ├── parks_cache.geojson
-│   ├── roads_cache.geojson
-│   ├── heritage_buildings_cache.geojson
-│   ├── poi_cache.geojson
-│   ├── ion_stations_cache.geojson
-│   ├── major_dev_cache.geojson
-│   └── waterloo_census_2021.json
-└── frontend/                   # React + Mapbox GL JS (in progress)
-```
-
----
-
 ## Why This Matters for Canada
 
 This project exists because of a specific Canadian failure.
@@ -224,7 +140,7 @@ The data exists. The computational tools exist. The AI capabilities exist. What'
 
 CityLens is that product.
 
-A councillor in Ward 7 should be able to see, in 30 seconds, that rezoning the block at King & University could add 840 housing units, generate $2.1M in annual property tax revenue, and increase ION ridership by 400 daily trips — but that 3 of those parcels are within 50 metres of a heritage building and 7 would require parking variances.
+A councillor in Ward 7 should be able to type *"Build mixed-use housing at King and University"* and see, in seconds, that the development could add 840 housing units, generate $2.1M in annual property tax revenue, and increase ION ridership by 400 daily trips — but that 3 of those parcels are within 50 metres of a heritage building and 7 would require parking variances.
 
 A student paying $950/month in rent should be able to see which parcels near their campus score highest for residential development, who their councillor is, and generate a brief they can bring to a public meeting.
 
@@ -240,8 +156,9 @@ CityLens gives them a tool to see what their city could look like if one zoning 
 
 **CityLens** · Hack Canada 2026
 
-*Ask a question. See the future.*
+*Envision with CityLens.*
 
 Built with 🇨🇦 open data from the city we're standing in.
 
 </div>
+
