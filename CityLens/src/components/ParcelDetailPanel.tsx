@@ -102,12 +102,12 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
   const isOpen = !!parcelId;
 
   return (
-    <div className={`absolute top-0 right-0 h-full w-full max-w-[400px] bg-[#0A1628]/95 backdrop-blur-xl border-l border-[#1E3050] z-20 flex flex-col transition-transform duration-400 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+    <div className={`absolute top-0 right-0 h-full w-full max-w-[400px] bg-[#050A1A]/95 backdrop-blur-xl border-l border-[#1E3050] z-20 flex flex-col transition-transform duration-400 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`} style={{ fontFamily: 'Rubik' }}>
       <div className="flex-1 overflow-y-auto hide-scrollbar p-5">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[17px] text-white font-semibold">Parcel Details</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#111D32] hover:bg-[#1E3050] text-[#94A3B8] transition-colors">
+          <h2 className="text-[17px] text-white font-semibold" style={{ fontFamily: 'Unbounded' }}>Parcel Details</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#0A0F2E] hover:bg-[#1E3050] text-[#94A3B8] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -115,7 +115,7 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
         {loading && (
           <div className="flex flex-col gap-3">
             {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="h-16 bg-[#111D32] rounded-xl animate-pulse" />
+              <div key={i} className="h-16 bg-[#0A0F2E] rounded-xl animate-pulse" />
             ))}
           </div>
         )}
@@ -134,11 +134,11 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
             } />
 
             {/* Address + Meta */}
-            <div className="bg-[#111D32] rounded-xl p-4 border border-[#1E3050] mb-4">
+            <div className="bg-[#0A0F2E] rounded-xl p-4 border border-[#1E3050] mb-4">
               <div className="flex items-start gap-2 mb-3">
                 <MapPin className="w-4 h-4 text-[#3B82F6] mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-white text-[14px] font-medium">{data.top_3_contributing_features.length > 0 ? '' : ''}{data.explanation?.split('.')[0] || `Parcel ${data.parcel_id}`}</p>
+                  <p className="text-white text-[14px] font-medium" style={{ fontFamily: 'Unbounded' }}>{data.top_3_contributing_features.length > 0 ? '' : ''}{data.explanation?.split('.')[0] || `Parcel ${data.parcel_id}`}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[12px]">
@@ -169,7 +169,7 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
             )}
 
             {/* Ward & Councillor */}
-            <div className="bg-[#111D32] rounded-xl p-3 border border-[#1E3050] mb-4 flex items-center gap-3">
+            <div className="bg-[#0A0F2E] rounded-xl p-3 border border-[#1E3050] mb-4 flex items-center gap-3">
               <Users className="w-4 h-4 text-[#3B82F6] flex-shrink-0" />
               <div className="text-[13px]">
                 <span className="text-white">{data.ward}</span>
@@ -259,7 +259,7 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
                   {showCensus ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
                 {showCensus && (
-                  <div className="bg-[#111D32] rounded-xl p-3 border border-[#1E3050] grid grid-cols-2 gap-3 text-[12px] animate-fade-in">
+                  <div className="bg-[#0A0F2E] rounded-xl p-3 border border-[#1E3050] grid grid-cols-2 gap-3 text-[12px] animate-fade-in">
                     <div>
                       <span className="text-[#64748B]">Population</span>
                       <p className="text-white font-medium">{data.district_context.population.toLocaleString()}</p>
@@ -300,7 +300,7 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
               <div className="flex gap-2">
                 <input
                   type="text"
-                  className="flex-1 bg-[#111D32] border border-[#1E3050] rounded-lg px-3 py-2 text-white text-[13px] focus:outline-none focus:border-[#3B82F6] placeholder-[#334155]"
+                  className="flex-1 bg-[#0A0F2E] border border-[#1E3050] rounded-lg px-3 py-2 text-white text-[13px] focus:outline-none focus:border-[#3B82F6] placeholder-[#334155]"
                   placeholder="e.g. Build a grocery store"
                   value={impactQuery}
                   onChange={e => setImpactQuery(e.target.value)}
@@ -315,10 +315,10 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
                 </button>
               </div>
               {impactLoading && (
-                <div className="mt-3 h-20 bg-[#111D32] rounded-xl animate-pulse" />
+                <div className="mt-3 h-20 bg-[#0A0F2E] rounded-xl animate-pulse" />
               )}
               {impactResult && !impactLoading && (
-                <div className="mt-3 bg-[#111D32] border border-[#1E3050] rounded-xl p-3 text-[13px] text-[#CBD5E1] leading-relaxed max-h-[200px] overflow-y-auto hide-scrollbar">
+                <div className="mt-3 bg-[#0A0F2E] border border-[#1E3050] rounded-xl p-3 text-[13px] text-[#CBD5E1] leading-relaxed max-h-[200px] overflow-y-auto hide-scrollbar">
                   {impactResult}
                 </div>
               )}
@@ -328,7 +328,7 @@ export default function ParcelDetailPanel({ parcelId, onClose }: ParcelDetailPan
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-[#1E3050] bg-[#0A1628]">
+      <div className="p-4 border-t border-[#1E3050] bg-[#050A1A]">
         <p className="text-center text-[11px] text-[#64748B]">
           Data: Region of Waterloo Open Data · Stats Canada Census 2021
         </p>

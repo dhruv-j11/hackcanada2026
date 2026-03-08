@@ -20,7 +20,7 @@ function StatBlock({ icon: Icon, label, value, color }: {
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; label: string; value: string; color?: string;
 }) {
   return (
-    <div className="bg-[#111D32] rounded-xl p-3 border border-[#1E3050]">
+    <div className="bg-[#0A0F2E] rounded-xl p-3 border border-[#1E3050]">
       <Icon className="w-4 h-4 mb-1.5" style={{ color: color || '#3B82F6' }} />
       <div className="text-[18px] font-bold text-white leading-tight">{value}</div>
       <div className="text-[11px] text-[#94A3B8] mt-0.5">{label}</div>
@@ -62,15 +62,15 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
   const isOpen = !!bbox;
 
   return (
-    <div className={`absolute top-0 right-0 h-full w-full max-w-[420px] bg-[#0A1628]/95 backdrop-blur-xl border-l border-[#1E3050] z-20 flex flex-col transition-transform duration-400 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+    <div className={`absolute top-0 right-0 h-full w-full max-w-[420px] bg-[#050A1A]/95 backdrop-blur-xl border-l border-[#1E3050] z-20 flex flex-col transition-transform duration-400 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`} style={{ fontFamily: 'Rubik' }}>
       <div className="flex-1 overflow-y-auto hide-scrollbar p-5">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-[17px] text-white font-semibold flex items-center gap-2">
+          <h2 className="text-[17px] text-white font-semibold flex items-center gap-2" style={{ fontFamily: 'Unbounded' }}>
             <BarChart3 className="w-5 h-5 text-[#3B82F6]" />
             Area Analysis
           </h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#111D32] hover:bg-[#1E3050] text-[#94A3B8] transition-colors">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#0A0F2E] hover:bg-[#1E3050] text-[#94A3B8] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -78,7 +78,7 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
         {loading && (
           <div className="flex flex-col gap-3">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-20 bg-[#111D32] rounded-xl animate-pulse" />
+              <div key={i} className="h-20 bg-[#0A0F2E] rounded-xl animate-pulse" />
             ))}
           </div>
         )}
@@ -104,7 +104,7 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
             {/* Tier Breakdown */}
             <div className="mb-5">
               <h3 className="text-[12px] uppercase text-[#64748B] font-bold tracking-wider mb-2">Tier Breakdown</h3>
-              <div className="bg-[#111D32] rounded-xl p-3 border border-[#1E3050]">
+              <div className="bg-[#0A0F2E] rounded-xl p-3 border border-[#1E3050]">
                 {Object.entries(data.tier_breakdown).map(([tier, count]) => {
                   const pct = data.total_parcels > 0 ? (count / data.total_parcels) * 100 : 0;
                   return (
@@ -129,7 +129,7 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
             {data.cluster_breakdown && Object.keys(data.cluster_breakdown).length > 0 && (
               <div className="mb-5">
                 <h3 className="text-[12px] uppercase text-[#64748B] font-bold tracking-wider mb-2">Cluster Breakdown</h3>
-                <div className="bg-[#111D32] rounded-xl p-3 border border-[#1E3050] flex flex-wrap gap-2">
+                <div className="bg-[#0A0F2E] rounded-xl p-3 border border-[#1E3050] flex flex-wrap gap-2">
                   {Object.entries(data.cluster_breakdown).map(([name, count]) => (
                     <span key={name} className="bg-[#3B82F6]/10 border border-[#3B82F6]/20 text-[#93C5FD] px-2.5 py-1 rounded-full text-[11px] font-medium">
                       {name}: {count}
@@ -155,7 +155,7 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
                 <h3 className="text-[12px] uppercase text-[#64748B] font-bold tracking-wider mb-2">Wards Affected</h3>
                 <div className="space-y-1.5">
                   {data.wards_affected.map((w, i) => (
-                    <div key={i} className="bg-[#111D32] rounded-lg p-2.5 border border-[#1E3050] flex justify-between items-center text-[12px]">
+                    <div key={i} className="bg-[#0A0F2E] rounded-lg p-2.5 border border-[#1E3050] flex justify-between items-center text-[12px]">
                       <div>
                         <span className="text-white">{w.ward}</span>
                         <span className="text-[#64748B] ml-1.5">· {w.councillor}</span>
@@ -175,7 +175,7 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
                   <button
                     key={p.parcel_id}
                     onClick={() => onParcelClick(p.parcel_id)}
-                    className="w-full bg-[#111D32] rounded-lg p-2.5 border border-[#1E3050] flex items-center gap-3 text-[12px] hover:border-[#3B82F6]/50 transition-colors text-left"
+                    className="w-full bg-[#0A0F2E] rounded-lg p-2.5 border border-[#1E3050] flex items-center gap-3 text-[12px] hover:border-[#3B82F6]/50 transition-colors text-left"
                   >
                     <span className="w-5 h-5 rounded-full bg-[#3B82F6]/20 text-[#3B82F6] flex items-center justify-center text-[10px] font-bold flex-shrink-0">{i + 1}</span>
                     <div className="flex-1 min-w-0">
@@ -200,7 +200,7 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
               Generate Community Brief
             </button>
             {briefText && (
-              <div className="mt-3 bg-[#111D32] border border-[#1E3050] rounded-xl p-3 text-[13px] text-[#CBD5E1] leading-relaxed max-h-[200px] overflow-y-auto hide-scrollbar">
+              <div className="mt-3 bg-[#0A0F2E] border border-[#1E3050] rounded-xl p-3 text-[13px] text-[#CBD5E1] leading-relaxed max-h-[200px] overflow-y-auto hide-scrollbar">
                 {briefText}
               </div>
             )}
@@ -209,7 +209,7 @@ export default function AreaAnalysisPanel({ bbox, onClose, onParcelClick }: Area
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-[#1E3050] bg-[#0A1628]">
+      <div className="p-4 border-t border-[#1E3050] bg-[#050A1A]">
         <p className="text-center text-[11px] text-[#64748B]">
           Data: Region of Waterloo Open Data · Stats Canada Census 2021
         </p>

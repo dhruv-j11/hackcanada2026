@@ -1,5 +1,6 @@
-import { Hexagon, LogIn, LogOut, User } from 'lucide-react';
+import { LogIn, LogOut, User } from 'lucide-react';
 import { useAuth0 } from '@auth0/auth0-react';
+import { Link } from 'react-router-dom';
 
 export default function Navbar() {
   const { isAuthenticated, user, loginWithRedirect, logout, isLoading } = useAuth0();
@@ -9,17 +10,18 @@ export default function Navbar() {
   const handleLogout = () => logout({ logoutParams: { returnTo: window.location.origin } });
 
   return (
-    <nav className="fixed top-0 w-full z-50 bg-[#0A1628]/80 backdrop-blur-xl border-b border-[#1E3050]">
+    <nav className="fixed top-0 w-full z-50 bg-[#0041BA]/80 backdrop-blur-xl border-b border-[#04338F]">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Hexagon className="w-6 h-6 text-[#3B82F6]" />
-          <span className="text-white font-bold text-[20px] tracking-tight">CityLens</span>
+          <Link to="/" className="flex items-center gap-3">
+            <img src="/logo.png" alt="CityLens Logo" className="h-8 object-contain" />
+          </Link>
         </div>
         
-        <div className="flex items-center gap-3">
-          <span className="px-3 py-1.5 rounded-full border border-[#1E3050] text-[#64748B] text-xs font-medium">
-            Hack Canada 2026
-          </span>
+        <div className="flex items-center gap-6">
+          <Link to="/why" className="text-white/80 hover:text-white text-[14px] font-medium transition-colors hidden sm:block">
+            Why CityLens
+          </Link>
 
           {!isLoading && (
             isAuthenticated ? (

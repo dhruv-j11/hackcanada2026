@@ -7,9 +7,9 @@ const TIERS = [
 
 export default function ScoreLegend() {
   return (
-    <div className="absolute bottom-6 left-4 z-10">
-      <div className="bg-[#111D32]/90 backdrop-blur-md rounded-xl px-3 py-2.5 border border-[#1E3050] shadow-lg">
-        <div className="text-[10px] uppercase text-[#64748B] font-bold tracking-wider mb-2">Opportunity Score</div>
+    <div className="absolute bottom-6 left-4 z-10" style={{ fontFamily: 'Rubik' }}>
+      <div className="bg-[#0A0F2E]/90 backdrop-blur-md rounded-xl px-3 py-2.5 border border-[#1E3050] shadow-lg">
+        <div className="text-[10px] uppercase text-[#64748B] font-bold tracking-wider mb-2" style={{ fontFamily: 'Unbounded' }}>Opportunity Score</div>
         <div className="flex flex-col gap-1.5">
           {TIERS.map(tier => (
             <div key={tier.name} className="flex items-center gap-2">

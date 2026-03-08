@@ -118,7 +118,7 @@ export default function MapDashboard() {
   }, []);
 
   return (
-    <div className={`relative w-screen h-screen overflow-hidden ${isLightMode ? 'bg-[#F8FAFC]' : 'bg-[#0A1628]'} opacity-0 animate-[fade-in_0.8s_ease-out_forwards]`}>
+    <div className={`relative w-screen h-screen overflow-hidden ${isLightMode ? 'bg-[#F8FAFC]' : 'bg-[#050A1A]'} opacity-0 animate-[fade-in_0.8s_ease-out_forwards]`} style={{ fontFamily: 'Rubik' }}>
       <MapView
         key={refreshKey}
         is3DMode={is3DMode}

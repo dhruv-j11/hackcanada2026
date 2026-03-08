@@ -1,7 +1,10 @@
 // CityLens Backend API Service
 // Base URL for the FastAPI backend
-const API_BASE = window.location.hostname === 'localhost' 
-  ? 'http://localhost:8000' 
+const isLocal = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+  || window.location.hostname.startsWith('192.168.')
+  || window.location.hostname.startsWith('10.');
+const API_BASE = isLocal
+  ? `http://localhost:8000`
   : 'http://155.138.136.112:8000';
 
 // ─── Type Definitions ──────────────────────────────────────────

@@ -59,7 +59,7 @@ const ZONES = {
 };
 
 export async function simulateZoningChange(query: string): Promise<SimulationResult> {
-  const systemPrompt = `You are ZoneWise, an AI urban planning simulator for Waterloo, Ontario, Canada.
+  const systemPrompt = `You are CityLens AI, an urban planning simulator for Waterloo, Ontario, Canada.
 
 Context about Waterloo:
 - Population: 155,550 (including 33,610 students)

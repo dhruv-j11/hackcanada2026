@@ -96,7 +96,8 @@ export default function QueryBar({ onQuerySubmit }: QueryBarProps) {
       <div className="flex flex-col gap-3 animate-fade-in-up" style={{ animationDelay: '300ms', animationFillMode: 'both' }}>
         <form 
           onSubmit={handleSubmit}
-          className="flex items-center h-[56px] bg-[#111D32]/95 backdrop-blur-[16px] border border-[#1E3050] rounded-2xl px-2 shadow-[0_-4px_32px_rgba(59,130,246,0.05)]"
+          className="flex items-center h-[56px] bg-[#050A1A]/95 backdrop-blur-[16px] border border-[#1E3050] rounded-2xl px-2 shadow-[0_-4px_32px_rgba(59,130,246,0.05)]"
+          style={{ fontFamily: 'Rubik' }}
         >
           <button 
             type="button"
@@ -115,7 +116,7 @@ export default function QueryBar({ onQuerySubmit }: QueryBarProps) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={recording ? 'Listening...' : 'Ask about any zoning change...'}
+            placeholder={recording ? 'Listening...' : 'Ask CityLens anything... (e.g., "Build a 4-storey condo on King St")'}
             className="flex-1 bg-transparent border-none text-white px-4 placeholder:text-[#64748B] focus:outline-none text-[15px]"
           />
           

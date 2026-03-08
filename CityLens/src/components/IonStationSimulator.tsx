@@ -45,11 +45,11 @@ export default function IonStationSimulator({ isActive, clickedLocation, onClose
   if (!isActive) return null;
 
   return (
-    <div className="absolute bottom-24 left-4 z-20 w-[340px]">
-      <div className="bg-[#111D32]/95 backdrop-blur-xl border border-[#1E3050] rounded-2xl shadow-2xl overflow-hidden">
+    <div className="absolute bottom-24 left-4 z-20 w-[340px]" style={{ fontFamily: 'Rubik' }}>
+      <div className="bg-[#050A1A]/95 backdrop-blur-xl border border-[#1E3050] rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#1E3050]">
-          <h3 className="text-[15px] text-white font-semibold flex items-center gap-2">
+          <h3 className="text-[15px] text-white font-semibold flex items-center gap-2" style={{ fontFamily: 'Unbounded' }}>
             <Train className="w-4 h-4 text-[#06B6D4]" />
             ION Station Simulator
           </h3>
@@ -84,7 +84,7 @@ export default function IonStationSimulator({ isActive, clickedLocation, onClose
           {result && result.summary && (
             <div className="space-y-3">
               {/* Score change summary */}
-              <div className="bg-[#0A1628] rounded-xl p-3 border border-[#06B6D4]/20">
+              <div className="bg-[#0A0F2E] rounded-xl p-3 border border-[#06B6D4]/20">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[12px] text-[#64748B] uppercase font-bold tracking-wider">Avg Score Impact</span>
                   <TrendingUp className="w-4 h-4 text-[#22C55E]" />
@@ -101,7 +101,7 @@ export default function IonStationSimulator({ isActive, clickedLocation, onClose
                 <h4 className="text-[11px] uppercase text-[#64748B] font-bold tracking-wider mb-2">Most Improved</h4>
                 <div className="space-y-1 max-h-[200px] overflow-y-auto hide-scrollbar">
                   {result.summary.top_20_most_improved.slice(0, 8).map((p, i) => (
-                    <div key={p.parcel_id} className="flex items-center gap-2 bg-[#0A1628] rounded-lg p-2 border border-[#1E3050] text-[11px]">
+                    <div key={p.parcel_id} className="flex items-center gap-2 bg-[#0A0F2E] rounded-lg p-2 border border-[#1E3050] text-[11px]">
                       <span className="w-4 h-4 rounded-full bg-[#22C55E]/20 text-[#22C55E] flex items-center justify-center text-[9px] font-bold flex-shrink-0">{i + 1}</span>
                       <span className="text-white truncate flex-1">{p.address}</span>
                       <span className="text-[#22C55E] font-bold">+{p.delta.toFixed(1)}</span>

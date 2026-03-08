@@ -1,11 +1,18 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { MAPBOX_TOKEN, INITIAL_VIEW_STATE, DARK_STYLE, LIGHT_STYLE, SCORE_COLOR_RAMP, buildingColor } from '../utils/mapConfig';
+import {
+  MAPBOX_TOKEN, INITIAL_VIEW_STATE, DARK_STYLE, LIGHT_STYLE,
+  SCORE_COLOR_RAMP, SCORE_HEIGHT_EXPR,
+  ION_LINE_COLOR, ION_LINE_WIDTH, ION_GLOW_WIDTH, ION_GLOW_OPACITY, ION_STATION_RADIUS,
+  PARCEL_OUTLINE_COLOR, PARCEL_OUTLINE_WIDTH, PARCEL_OUTLINE_OPACITY,
+  PARCEL_3D_OPACITY, PARCEL_FLAT_OPACITY,
+} from '../utils/mapConfig';
 import { ionLineGeoJSON, ionStationsGeoJSON } from '../data/ionRoute';
 import { fetchParcelScores } from '../services/apiService';
 import type { IonSimulationResult } from '../services/apiService';
 import type { SimulationResult } from '../services/geminiService';
+import { add3DBuildings } from '../utils/mapConfig';
 import circle from '@turf/circle';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -30,8 +37,6 @@ interface MapViewProps {
   simulationResult?: SimulationResult | null;
 }
 
-
-
 export default function MapView({
   is3DMode, isLightMode, visibleLayers, resetTrigger,
   onParcelClick, onMapClick, ionSimResult, ionSimMode, drawAreaMode, onBboxDraw,
@@ -42,44 +47,243 @@ export default function MapView({
   const [mapReady, setMapReady] = useState(false);
   const drawStartRef = useRef<mapboxgl.LngLat | null>(null);
 
-
-  // Refs for values used in callbacks
+  // Refs for values used in callbacks (avoids stale closure)
   const isLightModeRef = useRef(isLightMode);
   const is3DModeRef = useRef(is3DMode);
   const ionSimModeRef = useRef(ionSimMode);
   const drawAreaModeRef = useRef(drawAreaMode);
+  const onParcelClickRef = useRef(onParcelClick);
+  const onMapClickRef = useRef(onMapClick);
+  const onBboxDrawRef = useRef(onBboxDraw);
 
   useEffect(() => { isLightModeRef.current = isLightMode; }, [isLightMode]);
   useEffect(() => { is3DModeRef.current = is3DMode; }, [is3DMode]);
   useEffect(() => { ionSimModeRef.current = ionSimMode; }, [ionSimMode]);
   useEffect(() => { drawAreaModeRef.current = drawAreaMode; }, [drawAreaMode]);
+  useEffect(() => { onParcelClickRef.current = onParcelClick; }, [onParcelClick]);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
+  useEffect(() => { onBboxDrawRef.current = onBboxDraw; }, [onBboxDraw]);
 
-  // ─── Load Parcel Scores ─────────────────────────────────────
-  const loadParcelScores = useCallback(async (m: mapboxgl.Map, bbox?: string) => {
+  // ─── INIT ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapContainer.current || map.current) return;
+    mapContainer.current.innerHTML = '';
+
+    const m = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: isLightModeRef.current ? LIGHT_STYLE : DARK_STYLE,
+      ...INITIAL_VIEW_STATE,
+      antialias: true
+    });
+
+    map.current = m;
+
+    // ──────────────────────────────────────────────────────
+    // Shared function that adds ALL custom layers to the map.
+    // Called by BOTH 'load' (initial) and 'style.load' (theme toggle).
+    // ──────────────────────────────────────────────────────
+    function addAllCustomLayers() {
+      const light = isLightModeRef.current;
+
+      // ── 1. 3D Mapbox buildings (from composite source) ──
+      add3DBuildings(m);
+
+      // ── 2. ION LRT line ──
+      if (!m.getSource('ion-route')) {
+        m.addSource('ion-route', { type: 'geojson', data: ionLineGeoJSON });
+      }
+      if (!m.getLayer('ion-line-glow')) {
+        m.addLayer({
+          id: 'ion-line-glow', type: 'line', source: 'ion-route',
+          paint: { 'line-color': ION_LINE_COLOR, 'line-width': ION_GLOW_WIDTH, 'line-opacity': ION_GLOW_OPACITY }
+        });
+      }
+      if (!m.getLayer('ion-line-main')) {
+        m.addLayer({
+          id: 'ion-line-main', type: 'line', source: 'ion-route',
+          paint: { 'line-color': ION_LINE_COLOR, 'line-width': ION_LINE_WIDTH }
+        });
+      }
+
+      // ── 3. ION Stations ──
+      if (!m.getSource('ion-stations')) {
+        m.addSource('ion-stations', { type: 'geojson', data: ionStationsGeoJSON });
+      }
+      if (!m.getLayer('ion-station-points')) {
+        m.addLayer({
+          id: 'ion-station-points', type: 'circle', source: 'ion-stations',
+          paint: {
+            'circle-radius': ION_STATION_RADIUS,
+            'circle-color': ION_LINE_COLOR,
+            'circle-stroke-width': 1.5,
+            'circle-stroke-color': light ? '#000000' : '#FFFFFF'
+          }
+        });
+      }
+
+      // ── 4. Load parcel scores (async) ──
+      loadParcelScoresForMap(m);
+    }
+
+    // ──────────────────────────────────────────────────────
+    // style.load fires on EVERY style load — initial AND theme toggle.
+    // We add all custom layers here so they appear immediately on
+    // page refresh and persist across theme changes.
+    // ──────────────────────────────────────────────────────
+    m.on('style.load', () => {
+      addAllCustomLayers();
+      setMapReady(true);
+    });
+
+    // ── Parcel click handlers ──
+    m.on('click', 'parcel-scores-3d', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
+      if (ionSimModeRef.current || drawAreaModeRef.current) return;
+      const feature = e.features?.[0];
+      if (feature?.properties?.parcel_id) {
+        onParcelClickRef.current?.(feature.properties.parcel_id);
+        if (m.getLayer('parcel-highlight')) {
+          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
+        }
+        e.originalEvent.stopPropagation();
+      }
+    });
+    m.on('click', 'parcel-scores-flat', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
+      if (ionSimModeRef.current || drawAreaModeRef.current) return;
+      const feature = e.features?.[0];
+      if (feature?.properties?.parcel_id) {
+        onParcelClickRef.current?.(feature.properties.parcel_id);
+        if (m.getLayer('parcel-highlight')) {
+          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
+        }
+        e.originalEvent.stopPropagation();
+      }
+    });
+
+    // General click (for ION sim mode + clear highlight)
+    m.on('click', (e: mapboxgl.MapMouseEvent) => {
+      if (ionSimModeRef.current) {
+        onMapClickRef.current?.({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+      }
+      const features = m.queryRenderedFeatures(e.point, { layers: ['parcel-scores-3d', 'parcel-scores-flat'] });
+      if (!features.length && m.getLayer('parcel-highlight')) {
+        m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], '']);
+      }
+    });
+
+    // ── Hover highlight + cursor changes ──
+    m.on('mousemove', 'parcel-scores-3d', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
+      m.getCanvas().style.cursor = 'pointer';
+      if (e.features && e.features.length > 0) {
+        const pid = e.features[0].properties?.parcel_id;
+        if (pid && m.getLayer('parcel-hover')) {
+          m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], pid]);
+        }
+      }
+    });
+    m.on('mouseleave', 'parcel-scores-3d', () => {
+      m.getCanvas().style.cursor = '';
+      if (m.getLayer('parcel-hover')) {
+        m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], '']);
+      }
+    });
+    m.on('mousemove', 'parcel-scores-flat', (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.GeoJSONFeature[] }) => {
+      m.getCanvas().style.cursor = 'pointer';
+      if (e.features && e.features.length > 0) {
+        const pid = e.features[0].properties?.parcel_id;
+        if (pid && m.getLayer('parcel-hover')) {
+          m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], pid]);
+        }
+      }
+    });
+    m.on('mouseleave', 'parcel-scores-flat', () => {
+      m.getCanvas().style.cursor = '';
+      if (m.getLayer('parcel-hover')) {
+        m.setFilter('parcel-hover', ['==', ['get', 'parcel_id'], '']);
+      }
+    });
+
+    // ── Reload scores on moveend ──
+    m.on('moveend', () => {
+      const bounds = m.getBounds();
+      if (!bounds) return;
+      const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+      loadParcelScoresForMap(m, bbox);
+    });
+
+    // ── Bbox draw (for area analysis) ──
+    m.on('mousedown', (e: mapboxgl.MapMouseEvent) => {
+      if (!drawAreaModeRef.current) return;
+      drawStartRef.current = e.lngLat;
+      m.getCanvas().style.cursor = 'crosshair';
+    });
+    m.on('mouseup', (e: mapboxgl.MapMouseEvent) => {
+      if (!drawAreaModeRef.current || !drawStartRef.current) return;
+      const start = drawStartRef.current;
+      const end = e.lngLat;
+      drawStartRef.current = null;
+      m.getCanvas().style.cursor = '';
+
+      const minLon = Math.min(start.lng, end.lng);
+      const minLat = Math.min(start.lat, end.lat);
+      const maxLon = Math.max(start.lng, end.lng);
+      const maxLat = Math.max(start.lat, end.lat);
+
+      if (Math.abs(maxLon - minLon) > 0.001 || Math.abs(maxLat - minLat) > 0.001) {
+        const bboxStr = `${minLon},${minLat},${maxLon},${maxLat}`;
+        onBboxDrawRef.current?.(bboxStr);
+
+        const rectCoords: [number, number][] = [
+          [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]
+        ];
+        if (m.getSource('draw-rect')) {
+          (m.getSource('draw-rect') as mapboxgl.GeoJSONSource).setData({
+            type: 'Feature', properties: {},
+            geometry: { type: 'Polygon', coordinates: [rectCoords] }
+          });
+        } else {
+          m.addSource('draw-rect', {
+            type: 'geojson',
+            data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [rectCoords] } }
+          });
+          m.addLayer({
+            id: 'draw-rect-fill', type: 'fill', source: 'draw-rect',
+            paint: { 'fill-color': '#3B82F6', 'fill-opacity': 0.1 }
+          });
+          m.addLayer({
+            id: 'draw-rect-line', type: 'line', source: 'draw-rect',
+            paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
+          });
+        }
+      }
+    });
+
+    return () => { m.remove(); map.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── Load Parcel Scores ───────────────────────────────
+  async function loadParcelScoresForMap(m: mapboxgl.Map, bbox?: string) {
     try {
       const data = await fetchParcelScores(bbox ? { bbox } : undefined);
+      if (!m.getContainer()?.parentNode) return;
+
       if (m.getSource('parcel-scores')) {
         (m.getSource('parcel-scores') as mapboxgl.GeoJSONSource).setData(data as unknown as GeoJSON.FeatureCollection);
       } else {
         m.addSource('parcel-scores', { type: 'geojson', data: data as unknown as GeoJSON.FeatureCollection });
 
-        // 3D fill-extrusion layer
         m.addLayer({
           id: 'parcel-scores-3d',
           type: 'fill-extrusion',
           source: 'parcel-scores',
           paint: {
             'fill-extrusion-color': SCORE_COLOR_RAMP as any,
-            'fill-extrusion-height': [
-              'interpolate', ['linear'], ['get', 'score'],
-              0, 5, 50, 25, 100, 80
-            ],
+            'fill-extrusion-height': SCORE_HEIGHT_EXPR as any,
             'fill-extrusion-base': 0,
-            'fill-extrusion-opacity': 0.85
+            'fill-extrusion-opacity': PARCEL_3D_OPACITY,
           }
         });
 
-        // 2D flat layer (hidden by default)
         m.addLayer({
           id: 'parcel-scores-flat',
           type: 'fill',
@@ -87,20 +291,38 @@ export default function MapView({
           layout: { visibility: 'none' },
           paint: {
             'fill-color': SCORE_COLOR_RAMP as any,
-            'fill-opacity': 0.7,
-            'fill-outline-color': '#333333'
+            'fill-opacity': PARCEL_FLAT_OPACITY,
+            'fill-outline-color': PARCEL_OUTLINE_COLOR,
           }
         });
 
-        // Outlines
         m.addLayer({
           id: 'parcel-outlines',
           type: 'line',
           source: 'parcel-scores',
-          paint: { 'line-color': '#333333', 'line-width': 0.5, 'line-opacity': 0.4 }
+          paint: {
+            'line-color': PARCEL_OUTLINE_COLOR,
+            'line-width': PARCEL_OUTLINE_WIDTH,
+            'line-opacity': PARCEL_OUTLINE_OPACITY,
+          }
         });
 
-        // Highlight layer for selected parcel
+        m.addLayer({
+          id: 'parcel-hover',
+          type: 'fill-extrusion',
+          source: 'parcel-scores',
+          filter: ['==', ['get', 'parcel_id'], ''],
+          paint: {
+            'fill-extrusion-color': '#ffffff',
+            'fill-extrusion-height': [
+              'interpolate', ['linear'], ['get', 'score'],
+              0, 6, 50, 26, 100, 81
+            ] as any,
+            'fill-extrusion-base': 0,
+            'fill-extrusion-opacity': 0.25,
+          }
+        });
+
         m.addLayer({
           id: 'parcel-highlight',
           type: 'line',
@@ -113,7 +335,6 @@ export default function MapView({
           }
         });
 
-        // Score labels at high zoom
         m.addLayer({
           id: 'parcel-score-labels',
           type: 'symbol',
@@ -135,206 +356,7 @@ export default function MapView({
     } catch (e) {
       console.warn('Failed to load parcel scores:', e);
     }
-  }, []);
-
-  // ─── Add All Custom Layers ──────────────────────────────
-  const addAllCustomLayers = useCallback((m: mapboxgl.Map) => {
-    const layers = m.getStyle().layers;
-    let labelLayerId: string | undefined;
-    for (const layer of layers) {
-      if (layer.type === 'symbol' && layer.layout && (layer.layout as any)['text-field']) {
-        labelLayerId = layer.id;
-        break;
-      }
-    }
-
-    const light = isLightModeRef.current;
-
-    // 3D Mapbox buildings
-    if (!m.getLayer('add-3d-buildings')) {
-      m.addLayer({
-        id: 'add-3d-buildings',
-        source: 'composite',
-        'source-layer': 'building',
-        filter: ['==', 'extrude', 'true'],
-        type: 'fill-extrusion',
-        minzoom: 12,
-        paint: {
-          'fill-extrusion-color': buildingColor(light) as any,
-          'fill-extrusion-height': [
-            'interpolate', ['linear'], ['zoom'],
-            12, 0, 12.5, ['get', 'height']
-          ],
-          'fill-extrusion-base': [
-            'interpolate', ['linear'], ['zoom'],
-            12, 0, 12.5, ['get', 'min_height']
-          ],
-          'fill-extrusion-opacity': 0.85
-        }
-      }, labelLayerId);
-    }
-
-    // ION LRT line
-    if (!m.getSource('ion-route')) {
-      m.addSource('ion-route', { type: 'geojson', data: ionLineGeoJSON });
-      m.addLayer({
-        id: 'ion-line-glow', type: 'line', source: 'ion-route',
-        paint: { 'line-color': '#06B6D4', 'line-width': 8, 'line-opacity': 0.3 }
-      });
-      m.addLayer({
-        id: 'ion-line-main', type: 'line', source: 'ion-route',
-        paint: { 'line-color': '#06B6D4', 'line-width': 4 }
-      });
-    }
-
-    // ION Stations
-    if (!m.getSource('ion-stations')) {
-      m.addSource('ion-stations', { type: 'geojson', data: ionStationsGeoJSON });
-      m.addLayer({
-        id: 'ion-station-points', type: 'circle', source: 'ion-stations',
-        paint: {
-          'circle-radius': 6, 'circle-color': '#06B6D4',
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': light ? '#000000' : '#FFFFFF'
-        }
-      });
-    }
-
-    // Load parcel scores
-    loadParcelScores(m);
-  }, [loadParcelScores]);
-
-  // ─── INIT ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!mapContainer.current || map.current) return;
-    mapContainer.current.innerHTML = '';
-
-    const m = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: isLightModeRef.current ? LIGHT_STYLE : DARK_STYLE,
-      ...INITIAL_VIEW_STATE,
-      antialias: true
-    });
-
-    map.current = m;
-
-    m.on('style.load', () => {
-      addAllCustomLayers(m);
-      setMapReady(true);
-    });
-
-    m.on('load', () => {
-      // No flyTo needed — INITIAL_VIEW_STATE already has correct 3D camera
-    });
-
-    // Parcel click handler
-    m.on('click', 'parcel-scores-3d', (e) => {
-      if (ionSimModeRef.current || drawAreaModeRef.current) return;
-      const feature = e.features?.[0];
-      if (feature?.properties?.parcel_id) {
-        onParcelClick?.(feature.properties.parcel_id);
-        // Highlight clicked parcel
-        if (m.getLayer('parcel-highlight')) {
-          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
-        }
-        e.originalEvent.stopPropagation();
-      }
-    });
-    m.on('click', 'parcel-scores-flat', (e) => {
-      if (ionSimModeRef.current || drawAreaModeRef.current) return;
-      const feature = e.features?.[0];
-      if (feature?.properties?.parcel_id) {
-        onParcelClick?.(feature.properties.parcel_id);
-        if (m.getLayer('parcel-highlight')) {
-          m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], feature.properties.parcel_id]);
-        }
-        e.originalEvent.stopPropagation();
-      }
-    });
-
-    // General click (for ION sim mode + clear highlight)
-    m.on('click', (e) => {
-      if (ionSimModeRef.current) {
-        onMapClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat });
-      }
-      // Clear highlight when clicking empty space
-      const features = m.queryRenderedFeatures(e.point, { layers: ['parcel-scores-3d', 'parcel-scores-flat'] });
-      if (!features.length && m.getLayer('parcel-highlight')) {
-        m.setFilter('parcel-highlight', ['==', ['get', 'parcel_id'], '']);
-      }
-    });
-
-    // Cursor changes
-    m.on('mouseenter', 'parcel-scores-3d', () => { m.getCanvas().style.cursor = 'pointer'; });
-    m.on('mouseleave', 'parcel-scores-3d', () => { m.getCanvas().style.cursor = ''; });
-    m.on('mouseenter', 'parcel-scores-flat', () => { m.getCanvas().style.cursor = 'pointer'; });
-    m.on('mouseleave', 'parcel-scores-flat', () => { m.getCanvas().style.cursor = ''; });
-
-    // Reload scores on moveend
-    m.on('moveend', () => {
-      const bounds = m.getBounds();
-      if (!bounds) return;
-      const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
-      loadParcelScores(m, bbox);
-    });
-
-    // Bbox draw via mousedown+drag with Shift
-    m.on('mousedown', (e) => {
-      if (!drawAreaModeRef.current) return;
-      drawStartRef.current = e.lngLat;
-      m.getCanvas().style.cursor = 'crosshair';
-    });
-    m.on('mouseup', (e) => {
-      if (!drawAreaModeRef.current || !drawStartRef.current) return;
-      const start = drawStartRef.current;
-      const end = e.lngLat;
-      drawStartRef.current = null;
-      m.getCanvas().style.cursor = '';
-
-      const minLon = Math.min(start.lng, end.lng);
-      const minLat = Math.min(start.lat, end.lat);
-      const maxLon = Math.max(start.lng, end.lng);
-      const maxLat = Math.max(start.lat, end.lat);
-
-      // Only trigger if drag was meaningful (not just a click)
-      if (Math.abs(maxLon - minLon) > 0.001 || Math.abs(maxLat - minLat) > 0.001) {
-        const bboxStr = `${minLon},${minLat},${maxLon},${maxLat}`;
-        onBboxDraw?.(bboxStr);
-
-        // Draw rectangle overlay
-        const rectCoords: [number, number][] = [
-          [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]
-        ];
-        if (m.getSource('draw-rect')) {
-          (m.getSource('draw-rect') as mapboxgl.GeoJSONSource).setData({
-            type: 'Feature',
-            properties: {},
-            geometry: { type: 'Polygon', coordinates: [rectCoords] }
-          });
-        } else {
-          m.addSource('draw-rect', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: { type: 'Polygon', coordinates: [rectCoords] }
-            }
-          });
-          m.addLayer({
-            id: 'draw-rect-fill', type: 'fill', source: 'draw-rect',
-            paint: { 'fill-color': '#3B82F6', 'fill-opacity': 0.1 }
-          });
-          m.addLayer({
-            id: 'draw-rect-line', type: 'line', source: 'draw-rect',
-            paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
-          });
-        }
-      }
-    });
-
-    return () => { m.remove(); map.current = null; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
 
   // ─── STYLE SWITCH ─────────────────────────────────────
   useEffect(() => {
@@ -350,7 +372,6 @@ export default function MapView({
       bearing: is3DMode ? -15 : 0,
       duration: 1000
     });
-    // Toggle parcel layer visibility based on 3D mode
     try {
       if (map.current.getLayer('parcel-scores-3d')) {
         map.current.setLayoutProperty('parcel-scores-3d', 'visibility', is3DMode ? 'visible' : 'none');
@@ -366,7 +387,7 @@ export default function MapView({
     if (!map.current || !mapReady) return;
     try {
       const bVis = visibleLayers.buildings ? 'visible' : 'none';
-      if (map.current.getLayer('add-3d-buildings')) map.current.setLayoutProperty('add-3d-buildings', 'visibility', bVis);
+      if (map.current.getLayer('3d-buildings')) map.current.setLayoutProperty('3d-buildings', 'visibility', bVis);
       const lVis = visibleLayers.ionLine ? 'visible' : 'none';
       if (map.current.getLayer('ion-line-glow')) map.current.setLayoutProperty('ion-line-glow', 'visibility', lVis);
       if (map.current.getLayer('ion-line-main')) map.current.setLayoutProperty('ion-line-main', 'visibility', lVis);
@@ -391,7 +412,6 @@ export default function MapView({
     if (!map.current || !mapReady) return;
     const m = map.current;
 
-    // Clear previous sim
     ['sim-ion-delta-3d', 'sim-ion-delta-flat'].forEach(id => {
       if (m.getLayer(id)) m.removeLayer(id);
     });
@@ -403,7 +423,6 @@ export default function MapView({
         data: ionSimResult as unknown as GeoJSON.FeatureCollection
       });
 
-      // Delta heatmap: green = improved, size by delta
       m.addLayer({
         id: 'sim-ion-delta-3d',
         type: 'fill-extrusion',
@@ -411,10 +430,7 @@ export default function MapView({
         paint: {
           'fill-extrusion-color': [
             'interpolate', ['linear'], ['get', 'score_delta'],
-            0, '#334155',
-            5, '#22C55E',
-            15, '#16A34A',
-            30, '#15803D'
+            0, '#334155', 5, '#22C55E', 15, '#16A34A', 30, '#15803D'
           ],
           'fill-extrusion-height': [
             'interpolate', ['linear'], ['get', 'score_delta'],
@@ -444,7 +460,7 @@ export default function MapView({
       const m = map.current;
       clearSimulation();
 
-      const features = simulationResult.buildingFootprints.map((b, i) => ({
+      const features = simulationResult.buildingFootprints.map((b: { height: number; type: string; coordinates: [number, number][] }, i: number) => ({
         type: 'Feature' as const,
         properties: { height: b.height, base_height: 0, building_type: b.type, index: i },
         geometry: {
@@ -509,7 +525,7 @@ export default function MapView({
     } else {
       clearSimulation();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showSimulation, simulationResult, mapReady]);
 
   // ─── DRAW AREA CURSOR ────────────────────────────────
@@ -521,7 +537,6 @@ export default function MapView({
     } else {
       map.current.getCanvas().style.cursor = '';
       map.current.dragPan.enable();
-      // Clear draw rect
       if (map.current.getLayer('draw-rect-fill')) map.current.removeLayer('draw-rect-fill');
       if (map.current.getLayer('draw-rect-line')) map.current.removeLayer('draw-rect-line');
       if (map.current.getSource('draw-rect')) map.current.removeSource('draw-rect');
