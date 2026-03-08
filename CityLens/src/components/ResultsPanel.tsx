@@ -22,12 +22,13 @@ export default function ResultsPanel({
   };
 
   const statConfig = [
+    { key: 'total_parcels', label: 'Parcels Affected', icon: 'Map' },
     { key: 'housingUnits', label: 'Housing Units', icon: 'Home' },
     { key: 'newResidents', label: 'New Residents', icon: 'Users' },
+    { key: 'newJobs', label: 'New Jobs', icon: 'Briefcase' },
     { key: 'taxRevenue', label: 'Tax Revenue', icon: 'DollarSign' },
     { key: 'waterDemand', label: 'Water Demand', icon: 'Droplets', warningKey: 'waterMoratoriumImpacted' },
     { key: 'transitRidership', label: 'ION Ridership', icon: 'Train' },
-    { key: 'schoolChildren', label: 'School-Age Children', icon: 'GraduationCap' },
   ];
 
   return (
@@ -94,6 +95,8 @@ export default function ResultsPanel({
                 const IconComp = (icons as any)[config.icon] || icons.Activity;
                 const isWarning = config.warningKey && (result as any)[config.warningKey];
                 const val = (result.stats as any)[config.key] || 0;
+
+                if (val === 0 && config.key !== 'total_parcels') return null;
 
                 return (
                   <div 

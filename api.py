@@ -136,6 +136,28 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+class SpatialQuery(BaseModel):
+    method: str
+    street_name: Optional[str] = None
+    bound_start: Optional[str] = None
+    bound_end: Optional[str] = None
+    center_lat: Optional[float] = None
+    center_lng: Optional[float] = None
+    buffer_meters: Optional[float] = None
+    district_name: Optional[str] = None
+    ward_name: Optional[str] = None
+    score_min: Optional[float] = None
+    score_max: Optional[float] = None
+    limit: Optional[int] = None
+
+class ProposalIntentRequest(BaseModel):
+    action: str
+    target_description: str
+    zone_type: Optional[str] = None
+    parameters: dict
+    spatial_query: SpatialQuery
+    summary: str
+
 class PermitQueryRequest(BaseModel):
     """Request body for the /permits/ask endpoint."""
     question: str = Field(..., description="User's natural language question")
@@ -1188,6 +1210,197 @@ def health():
 
     return response
 
+
+# ---------------------------------------------------------------------------
+# Algorithmic Proposal Pipeline
+# ---------------------------------------------------------------------------
+def _compute_proposal_statistics(affected_parcels: list, parameters: dict, zone_type: str) -> dict:
+    total_area = sum(p["properties"].get("lot_area_sqm", 0) for p in affected_parcels)
+    max_storeys = parameters.get("max_storeys") or 6
+    if not isinstance(max_storeys, (int, float)):
+        max_storeys = 6
+    lot_coverage = parameters.get("lot_coverage") or 0.6
+    if not isinstance(lot_coverage, (int, float)):
+        lot_coverage = 0.6
+        
+    avg_unit_size_sqm = 75  # reasonable estimate for Waterloo market
+    avg_household_size = 2.1  # Stats Canada Waterloo CMA
+    avg_assessed_value_per_unit = 350000  # Waterloo avg condo
+    mill_rate = 0.0118  # Waterloo residential mill rate approx
+    
+    # Algorithmic estimates
+    buildable_area = total_area * lot_coverage
+    total_floor_area = buildable_area * max_storeys
+    
+    is_commercial = zone_type in ["commercial", "industrial", "park"]
+    is_mixed = zone_type == "mixed_use"
+
+    estimated_units = 0
+    estimated_population = 0
+    estimated_tax_revenue = 0
+    water_demand = 0
+    transit_ridership = 0
+    school_children = 0
+    
+    if is_commercial:
+        new_jobs = int(total_floor_area / 40) # 1 job per 40sqm avg
+        estimated_tax_revenue = int(total_floor_area * 15)
+        water_demand = new_jobs * 30 * 365 / 1000000 # 30L per worker per day
+        transit_ridership = int(new_jobs * 0.15)
+    else:
+        if is_mixed:
+            residential_area = total_floor_area * 0.7
+            commercial_area = total_floor_area * 0.3
+            new_jobs = int(commercial_area / 40)
+            estimated_tax_revenue += int(commercial_area * 15)
+        else:
+            residential_area = total_floor_area
+            new_jobs = 0
+            
+        estimated_units = int(residential_area / avg_unit_size_sqm)
+        estimated_population = int(estimated_units * avg_household_size)
+        estimated_tax_revenue += int(estimated_units * avg_assessed_value_per_unit * mill_rate)
+        
+        water_demand = (estimated_population * 220 * 365 / 1000000) + (new_jobs * 30 * 365 / 1000000)
+        transit_ridership = int(estimated_units * 0.4) + int(new_jobs * 0.15)
+        school_children = int(estimated_units * 0.1)
+    
+    ward_counts = {}
+    for p in affected_parcels:
+        ward = p["properties"].get("ward_name", "Unknown")
+        councillor = p["properties"].get("councillor_name", "Unknown")
+        key = (ward, councillor)
+        ward_counts[key] = ward_counts.get(key, 0) + 1
+        
+    return {
+        "housingUnits": estimated_units,
+        "newResidents": estimated_population,
+        "taxRevenue": estimated_tax_revenue,
+        "waterDemand": water_demand,
+        "transitRidership": transit_ridership,
+        "schoolChildren": school_children,
+        "newJobs": new_jobs if (is_commercial or is_mixed) else 0,
+        "affected_wards": [{"ward_name": w, "councillor": c, "parcel_count": n} for (w, c), n in ward_counts.items()],
+        "total_parcels": len(affected_parcels),
+        "total_area_sqm": round(total_area),
+    }
+
+@app.post("/simulate/proposal")
+def simulate_proposal(req: ProposalIntentRequest):
+    _require_data()
+    geojson = _state["scored_geojson"]
+    features = geojson["features"]
+    sq = req.spatial_query
+
+    matched_features = []
+
+    if sq.method == "street_corridor" and sq.street_name:
+        street = sq.street_name.lower().replace("st", "").replace("ave", "").replace("rd", "").strip()
+        for f in features:
+            address = str(f["properties"].get("ADDRESS", "")).lower()
+            if street in address:
+                matched_features.append(f)
+
+    elif sq.method == "radius" and sq.center_lat is not None and sq.center_lng is not None:
+        buffer_km = (sq.buffer_meters or 100) / 1000.0
+        deg_buffer = buffer_km / 111.0
+        clat, clng = sq.center_lat, sq.center_lng
+        for f in features:
+            lng, lat = _get_centroid(f.get("geometry", {}))
+            if lng is not None and lat is not None:
+                dist = ((lng - clng)**2 + (lat - clat)**2)**0.5
+                if dist <= deg_buffer:
+                    matched_features.append(f)
+
+    elif sq.method == "district" and sq.district_name:
+        dist_name = sq.district_name.lower()
+        for f in features:
+            d = str(f["properties"].get("district_name", "")).lower()
+            if dist_name in d or d in dist_name:
+                matched_features.append(f)
+
+    elif sq.method == "ward" and sq.ward_name:
+        ward_name = sq.ward_name.lower()
+        for f in features:
+            w = str(f["properties"].get("ward_name", "")).lower()
+            w_num = str(f["properties"].get("ward_number", ""))
+            if ward_name in w or ward_name in f"ward {w_num}":
+                matched_features.append(f)
+
+    elif sq.method == "parcels_by_score":
+        s_min = sq.score_min if sq.score_min is not None else 0
+        s_max = sq.score_max if sq.score_max is not None else 100
+        for f in features:
+            s_val = f["properties"].get("score", 0)
+            if s_min <= s_val <= s_max:
+                matched_features.append(f)
+
+    if not matched_features and sq.center_lat is not None and sq.center_lng is not None:
+         buffer_km = 0.5
+         deg_buffer = buffer_km / 111.0
+         clat, clng = sq.center_lat, sq.center_lng
+         for f in features:
+             lng, lat = _get_centroid(f.get("geometry", {}))
+             if lng is not None and lat is not None:
+                 if ((lng - clng)**2 + (lat - clat)**2)**0.5 <= deg_buffer:
+                     matched_features.append(f)
+                     
+    if not matched_features and len(features) > 0:
+        matched_features = features[:(sq.limit or 20)]
+        
+    if sq.limit and len(matched_features) > sq.limit:
+        matched_features = matched_features[:sq.limit]
+
+    stats = _compute_proposal_statistics(matched_features, req.parameters, req.zone_type or "mixed_use")
+    
+    zc = None
+    if matched_features:
+        lons = []
+        lats = []
+        for f in matched_features:
+            lng, lat = _get_centroid(f.get("geometry", {}))
+            if lng is not None:
+                lons.append(lng)
+                lats.append(lat)
+        if lons:
+            zc = {"lng": sum(lons)/len(lons), "lat": sum(lats)/len(lats)}
+            
+    if not zc:
+        zc = {"lng": -80.5283, "lat": 43.4731}
+        
+    base_height = 0
+    max_storeys = req.parameters.get("max_storeys")
+    if not isinstance(max_storeys, (int, float)):
+        max_storeys = 6
+    extrusion_height = max_storeys * 3.5
+
+    # Tag each feature with visualization height so mapbox can extrude
+    visualized_features = []
+    for f in matched_features:
+        vf = dict(f)
+        vf["properties"] = dict(f.get("properties", {}))
+        vf["properties"]["proposed_height"] = extrusion_height
+        vf["properties"]["building_type"] = req.zone_type or "mixed_use"
+        vf["properties"]["base_height"] = base_height
+        visualized_features.append(vf)
+
+    return {
+        "affected_parcels": {
+            "type": "FeatureCollection",
+            "features": visualized_features
+        },
+        "stats": stats,
+        "summary": req.summary,
+        "zoneCenter": zc,
+        "visualization": {
+            "fill_color": "#3B82F6" if req.zone_type == "residential" else "#06B6D4" if req.zone_type == "mixed_use" else "#8B5CF6",
+            "extrusion_height": extrusion_height,
+            "opacity": 0.8
+        },
+        "waterMoratoriumImpacted": True,
+        "narrative": req.summary,
+        "risks": ["Water moratorium zone — requires infrastructure investment"]
+    }
 
 # ---------------------------------------------------------------------------
 # Run

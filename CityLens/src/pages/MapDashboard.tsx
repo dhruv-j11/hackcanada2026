@@ -70,22 +70,41 @@ export default function MapDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Simulation query handler (QueryBar → Gemini → ResultsPanel)
+  // Simulation query handler (QueryBar → Gemini → Backend → Polygon Processing → Render)
   const handleQuerySubmit = async (query: string) => {
     setCurrentQuery(query);
     setIsResultsOpen(true);
     setSimLoading(true);
+    setSimResult(null);
     // Close other panels
     setSelectedParcelId(null);
     setDrawnBbox(null);
 
-    const aiResult = await simulateZoningChange(query);
-    setSimResult(aiResult);
-    setSimLoading(false);
+    try {
+      const aiResult = await simulateZoningChange(query);
+      setSimResult(aiResult);
+      setSimLoading(false);
 
-    setIsSpeaking(true);
-    await speakNarration(aiResult.narrative);
-    setIsSpeaking(false);
+      if (aiResult.narrative) {
+        setIsSpeaking(true);
+        await speakNarration(aiResult.narrative);
+        setIsSpeaking(false);
+      }
+    } catch (error) {
+      console.error('Simulation failed:', error);
+      setSimLoading(false);
+      // Show error in results panel via a minimal result
+      setSimResult({
+        action: 'error',
+        affected_parcels: { type: 'FeatureCollection', features: [] },
+        stats: { total_parcels: 0, total_area_sqm: 0, housingUnits: 0, newResidents: 0, taxRevenue: 0, transitRidership: 0, schoolChildren: 0, waterDemand: 0, affected_wards: [] },
+        summary: error instanceof Error ? error.message : 'Something went wrong processing your request.',
+        visualization: { fill_color: '#3B82F6', extrusion_height: 0, opacity: 0 },
+        waterMoratoriumImpacted: false,
+        narrative: error instanceof Error ? error.message : 'Something went wrong processing your request.',
+        risks: [],
+      });
+    }
   };
 
   const handleParcelClick = useCallback((parcelId: string) => {

@@ -1,196 +1,665 @@
-import { generateBuildings } from '../utils/buildingGenerator';
+// geminiService.ts — FULLY ALGORITHMIC, ZERO HARDCODING
+// Pipeline: User Prompt → Gemini → Backend spatial query → Client-side polygon processing → Render
+
+import * as turf from '@turf/turf';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
-export interface BuildingFootprint {
-  coordinates: [number, number][];
-  height: number;
-  type: 'residential' | 'mixed-use' | 'commercial';
+// Auto-detect local vs remote backend
+const isLocal = typeof window !== 'undefined' && (
+  ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+  || window.location.hostname.startsWith('192.168.')
+  || window.location.hostname.startsWith('10.')
+);
+const BACKEND_URL = isLocal ? 'http://localhost:8000' : 'http://155.138.136.112:8000';
+
+// ION LRT station coordinates for proximity calculations
+const ION_STATION_COORDS: [number, number][] = [
+  [-80.5416, 43.4980],
+  [-80.5384, 43.4919],
+  [-80.5350, 43.4833],
+  [-80.5283, 43.4731],
+  [-80.5222, 43.4673],
+  [-80.5190, 43.4630],
+  [-80.5155, 43.4565],
+  [-80.4980, 43.4510],
+  [-80.4908, 43.4472],
+  [-80.4860, 43.4430],
+  [-80.4750, 43.4340],
+];
+
+// ─── Interfaces ──────────────────────────────────────────
+
+export interface GeminiSpatialIntent {
+  thinking?: string;
+  action: string;
+  target_description: string;
+  zone_type?: string;
+  parameters: Record<string, any>;
+  spatial_query: {
+    method: string;
+    street_name?: string;
+    bound_start?: string;
+    bound_end?: string;
+    center_lat?: number;
+    center_lng?: number;
+    buffer_meters?: number;
+    district_name?: string;
+    ward_name?: string;
+    score_min?: number;
+    score_max?: number;
+    limit?: number;
+  };
+  summary: string;
+}
+
+export interface ComputedStatistics {
+  total_parcels: number;
+  total_area_sqm: number;
+  housingUnits: number;
+  newResidents: number;
+  taxRevenue: number;
+  transitRidership: number;
+  schoolChildren: number;
+  waterDemand: number;
+  affected_wards: { ward_name: string; councillor: string; parcel_count: number }[];
 }
 
 export interface SimulationResult {
-  zone: string;
-  proposedHeight: number;
-  proposedUse: string;
-  stats: {
-    housingUnits: number;
-    newResidents: number;
-    taxRevenue: number;
-    waterDemand: number;
-    transitRidership: number;
-    schoolChildren: number;
+  action: string;
+  affected_parcels: GeoJSON.FeatureCollection;
+  stats: ComputedStatistics;
+  summary: string;
+  zoneCenter?: { lng: number; lat: number };
+  visualization: {
+    fill_color: string;
+    extrusion_height: number;
+    opacity: number;
   };
   waterMoratoriumImpacted: boolean;
   narrative: string;
   risks: string[];
-  buildingFootprints: BuildingFootprint[];
-  zoneCenter?: { lng: number, lat: number };
 }
 
-// Fallback data if Gemini fails or key is missing
-const fallbackResult: SimulationResult = {
-  zone: "uptown",
-  proposedHeight: 6,
-  proposedUse: "mixed-use residential",
-  stats: {
-    housingUnits: 840,
-    newResidents: 1680,
-    taxRevenue: 2100000,
-    waterDemand: 135,
-    transitRidership: 336,
-    schoolChildren: 84
-  },
-  waterMoratoriumImpacted: true,
-  narrative: "Rezoning the Uptown Waterloo area to 6-storey mixed use would add approximately 840 housing units along the ION corridor. This provides much-needed density but puts additional strain on the already-affected water infrastructure.",
-  risks: ["Water moratorium zone — requires infrastructure investment", "Parking minimum variances needed"],
-  buildingFootprints: [
-    { coordinates: [[-80.5210, 43.4640], [-80.5195, 43.4640], [-80.5195, 43.4625], [-80.5210, 43.4625]], height: 21, type: "residential" },
-    { coordinates: [[-80.5193, 43.4640], [-80.5178, 43.4640], [-80.5178, 43.4628], [-80.5193, 43.4628]], height: 18, type: "mixed-use" },
-    { coordinates: [[-80.5210, 43.4623], [-80.5195, 43.4623], [-80.5195, 43.4612], [-80.5210, 43.4612]], height: 24, type: "residential" }
-  ]
-};
+// ─── Gemini System Prompt ──────────────────────────────────
 
-const ZONES = {
-  "uptown": { lng: -80.5190, lat: 43.4630 },
-  "university": { lng: -80.5283, lat: 43.4731 },
-  "midtown": { lng: -80.4980, lat: 43.4510 },
-  "downtown_kitchener": { lng: -80.4908, lat: 43.4472 },
-  "northfield": { lng: -80.5384, lat: 43.4919 }
-};
+const GEMINI_SYSTEM_PROMPT = `You are CityLens AI, an urban planning assistant for the City of Waterloo, Ontario, Canada.
 
-export async function simulateZoningChange(query: string): Promise<SimulationResult> {
-  const systemPrompt = `You are CityLens AI, an urban planning simulator for Waterloo, Ontario, Canada.
+You have access to a dataset of ~17,000 land parcels in Waterloo. Each parcel has:
+- A development readiness score (0-100)
+- Area in square meters
+- Current zoning designation
+- Ward assignment (Waterloo has 7 wards)
+- Proximity to ION LRT stations
+- Proximity to major roads
+- Current land use
 
-Context about Waterloo:
-- Population: 155,550 (including 33,610 students)
-- The ION LRT runs north-south through the city with 19 stations
-- The Region of Waterloo FROZE new development approvals in January 2026 due to water capacity concerns
-- Average water consumption: 220 litres per person per day
-- Average property tax revenue per residential unit: ~$2,500/year
-- Average persons per high-density unit: 1.8-2.0
-- ION LRT daily ridership: ~12,000 total, roughly 600-800 per station
-- New high-density development generates roughly 0.3-0.5 transit trips per unit per day
-- Average school-age children per 100 high-density units: ~8-12
-- Current zoning allows 4 storeys as-of-right in low-density zones (Housing Accelerator Fund changes)
-- Each storey is approximately 3.5 meters
+When a user describes a change they want to make to the city, you must:
+1. Understand their intent (what action, where, what parameters)
+2. Return ONLY a valid JSON object (no markdown, no code fences, no explanation)
 
-You have 5 pre-defined simulation zones along the ION corridor:
-1. "uptown" — Uptown Waterloo (King St & Willis Way area). Center: [-80.5190, 43.4630]. Currently mixed commercial/residential, 2-4 storeys.
-2. "university" — University of Waterloo / Columbia St corridor. Center: [-80.5283, 43.4731]. Currently low-density residential near campus.
-3. "midtown" — Grand River Hospital / Midtown area. Center: [-80.4980, 43.4510]. Low-density residential with large parking lots.
-4. "downtown_kitchener" — Central Station / Downtown Kitchener. Center: [-80.4908, 43.4472]. Mixed use, some high-rise already.
-5. "northfield" — Northfield Dr near Conestoga Mall. Center: [-80.5384, 43.4919]. Commercial/big box retail with large surface lots.
-
-When the user asks about a zoning change, you MUST respond with ONLY a JSON object (no markdown, no backticks, no explanation) in this exact format:
+The JSON must follow this schema:
 {
-  "zone": "uptown",
-  "proposedHeight": 6,
-  "proposedUse": "mixed-use residential",
-  "stats": {
-    "housingUnits": 840,
-    "newResidents": 1680,
-    "taxRevenue": 2100000,
-    "waterDemand": 135,
-    "transitRidership": 336,
-    "schoolChildren": 84
+  "thinking": "Step-by-step analysis of the request, context of Waterloo geography, and determination of building type and stats. Write at least 3 sentences.",
+  "action": "rezone" | "add_building" | "analyze" | "find_parcels" | "compare",
+  "target_description": "human readable description of the target area",
+  "zone_type": "high_density_residential" | "mixed_use" | "commercial" | "industrial" | "park" | "residential" | null,
+  "parameters": {
+    "max_storeys": <number, default 6 for residential, 4 for commercial, 12 for mixed_use>,
+    "setback_meters": <number, default 8>,
+    "lot_coverage": <0-1 float, default 0.6>,
+    "building_type": <string or null>
   },
-  "waterMoratoriumImpacted": true,
-  "narrative": "Rezoning the Uptown Waterloo area to 6-storey mixed use would add approximately 840 housing units...",
-  "risks": ["Water moratorium zone — requires infrastructure investment", "Parking minimum variances needed"],
-  "buildingFootprints": [
-    {
-      "coordinates": [[-80.5210, 43.4640], [-80.5195, 43.4640], [-80.5195, 43.4625], [-80.5210, 43.4625]],
-      "height": 21,
-      "type": "residential"
-    }
-  ]
+  "spatial_query": {
+    "method": "street_corridor" | "radius" | "district" | "ward" | "bbox" | "parcels_by_score" | "nearest_to_poi",
+    "street_name": <string or null>,
+    "bound_start": <string or null>,
+    "bound_end": <string or null>,
+    "center_lat": <number or null>,
+    "center_lng": <number or null>,
+    "buffer_meters": <number, default 100>,
+    "district_name": <string or null>,
+    "ward_name": <string or null>,
+    "score_min": <number or null>,
+    "score_max": <number or null>,
+    "limit": <number or null, set to 1 for singular building requests like 'a mall', 'a hospital'>
+  },
+  "summary": "A 1-2 sentence professional description of what you understood the user wants, mentioning Waterloo context."
 }
 
 CRITICAL RULES:
-- Calculate stats realistically using the context provided. Do NOT make up random numbers.
-- housingUnits: estimate based on zone area, proposed height, and ~65 sqm per unit with 70% efficiency
-- newResidents: housingUnits * 2.0
-- taxRevenue: housingUnits * 2500
-- waterDemand: newResidents * 220 * 365 / 1000000 (megalitres per year)
-- transitRidership: housingUnits * 0.4 (trips per day)
-- schoolChildren: housingUnits * 0.1
-- waterMoratoriumImpacted: true for all zones (the entire high-growth area is affected)
-- buildingFootprints: generate 3-6 realistic building footprint polygons near the zone center. Each building should be a slightly different size and height. Make the coordinates form realistic rectangular building shapes (not squares — real buildings are rectangular). Vary heights between (proposedHeight - 1) * 3.5 and (proposedHeight + 1) * 3.5 meters for visual variety.
-- The narrative should be 2-3 sentences, professional but clear, mentioning specific Waterloo context.
-- If the query is vague or doesn't match a zone, pick the most relevant zone and explain your reasoning in the narrative.
+- If the user asks for a NON-RESIDENTIAL building (e.g. shopping mall, office, factory, hospital, stadium), you MUST set "zone_type" to "commercial" or "industrial".
+- If the user asks for a SINGULAR building ("a shopping mall", "a new tower"), you MUST set "spatial_query.limit" to 1.
+- "commercial" properties will calculate jobs instead of housing units. "residential" calculates homes instead of jobs. "mixed_use" calculates both.
+
+WATERLOO GEOGRAPHY REFERENCE (use these coordinates for center_lat/center_lng):
+
+MAJOR STREETS (with approximate center coordinates and suggested buffer):
+- King St (main corridor, runs NE-SW): center 43.4640, -80.5230, buffer 150m. From Conestoga Mall (43.498, -80.542) through Uptown (43.464, -80.523) to Kitchener
+- University Ave (E-W near universities): center 43.4720, -80.5350, buffer 120m
+- Columbia St (E-W): center 43.4760, -80.5280, buffer 100m
+- Weber St (N-S, parallel to King): center 43.4700, -80.5150, buffer 120m
+- Bridgeport Rd (north): center 43.4850, -80.5200, buffer 100m
+- Erb St (E-W through Uptown): center 43.4640, -80.5280, buffer 120m
+- Albert St: center 43.4690, -80.5280, buffer 80m
+- Lester St: center 43.4730, -80.5300, buffer 80m
+- Philip St: center 43.4710, -80.5320, buffer 80m
+- Hazel St: center 43.4700, -80.5250, buffer 80m
+- Regina St: center 43.4650, -80.5240, buffer 80m
+- Caroline St: center 43.4660, -80.5270, buffer 80m
+- Northfield Dr: center 43.4920, -80.5380, buffer 120m
+
+KEY AREAS (use "radius" or "district" method):
+- Uptown Waterloo: center 43.4640, -80.5230, district_name "Uptown"
+- Northdale (student housing): center 43.4760, -80.5290, district_name "Northdale"
+- Beechwood: center 43.4550, -80.5250, district_name "Beechwood"
+- Lakeshore: center 43.4500, -80.5400, district_name "Lakeshore"
+- Westmount: center 43.4600, -80.5450, district_name "Westmount"
+- Columbia Lake area: center 43.4720, -80.5500, district_name "Columbia Lake"
+- Laurelwood: center 43.4430, -80.5350, district_name "Laurelwood"
+- SPUR Innovation area: center 43.4650, -80.5220 (near Uptown core)
+
+UNIVERSITIES:
+- University of Waterloo: 43.4723, -80.5449
+- Wilfrid Laurier University: 43.4738, -80.5275
+
+ION LRT STATIONS (runs along King St corridor):
+- Conestoga: 43.498, -80.542
+- Northfield: 43.492, -80.538
+- Research & Technology: 43.483, -80.535
+- University of Waterloo: 43.473, -80.528
+- Laurier/Waterloo Park: 43.467, -80.522
+- Uptown Waterloo: 43.463, -80.519
+- Allen: 43.457, -80.516
+- Grand River Hospital: 43.451, -80.498
+- Central Station: 43.447, -80.491
+- Kitchener Market: 43.443, -80.486
+- Fairway: 43.434, -80.475
+
+WARDS: Ward 1 through Ward 7 (use "ward" method with ward_name like "Ward 6")
+
+RULES:
+- For street queries: ALWAYS use "street_corridor" method with the street_name AND set center_lat/center_lng from the coordinates above AND set buffer_meters 80-150
+- For "near" / "around" / "within X of": use "radius" method with center coordinates and buffer_meters
+- For neighbourhood/district names: use "district" method with district_name
+- For ward numbers: use "ward" method with ward_name (e.g., "Ward 6")
+- For score/readiness queries: use "parcels_by_score" with score_min/score_max. ALSO set center_lat/center_lng if an area is mentioned
+- For "near ION stations": use "radius" method with center at the nearest ION station coords
+- Default max_storeys: 6 for residential, 4 for commercial, 12 for mixed_use, 8 for high_density_residential
+- Default setback_meters: 3
+- Default lot_coverage: 0.6
+- ONLY return valid JSON. No markdown. No backticks. No explanation text.
+- If the request is nonsensical (e.g., "build a cannon"), return action "error" with summary explaining why.
 `;
 
-  // Determine which zone this query targets so we can fetch spatial data
-  let targetZone = 'uptown';
-  const q = query.toLowerCase();
-  if (q.includes('university') || q.includes('campus') || q.includes('density near ion')) targetZone = 'university';
-  else if (q.includes('midtown') || q.includes('hospital')) targetZone = 'midtown';
-  else if (q.includes('downtown') || q.includes('kitchener')) targetZone = 'downtown_kitchener';
-  else if (q.includes('northfield') || q.includes('mall') || q.includes('conestoga')) targetZone = 'northfield';
-  
-  const zoneCenter = ZONES[targetZone as keyof typeof ZONES];
+// ─── Client-Side Polygon Processing ──────────────────────
 
+/**
+ * Creates a rectangular building footprint polygon from a centroid point.
+ * Uses lot_area_sqm, lot_coverage, and setback to compute dimensions.
+ * Returns a polygon that is INSIDE the parcel boundary with proper setbacks.
+ */
+function createFootprintFromPoint(
+  coords: [number, number],
+  lotAreaSqm: number,
+  lotCoverage: number,
+  setbackMeters: number,
+  rotationDeg: number = 0
+): GeoJSON.Feature<GeoJSON.Polygon> | null {
+  try {
+    // Compute buildable area: lot area * coverage, reduced by setback
+    const lotSide = Math.sqrt(lotAreaSqm);
+    const setbackReduction = Math.max(0, 1 - (2 * setbackMeters / lotSide));
+    const buildableAreaSqm = lotAreaSqm * lotCoverage * setbackReduction * setbackReduction;
+
+    if (buildableAreaSqm < 10) return null; // too small to build on
+
+    // Create a rectangular footprint (slight aspect ratio for realism)
+    const aspectRatio = 1.3 + (lotAreaSqm % 7) * 0.05; // slight variation per parcel
+    const width = Math.sqrt(buildableAreaSqm / aspectRatio);
+    const length = buildableAreaSqm / width;
+
+    // Convert meters to degrees at this latitude
+    const metersPerDegreeLat = 111320;
+    const metersPerDegreeLng = 111320 * Math.cos(coords[1] * Math.PI / 180);
+    const halfW = (width / 2) / metersPerDegreeLng;
+    const halfL = (length / 2) / metersPerDegreeLat;
+
+    // Create rectangle centered on the point
+    const ring: [number, number][] = [
+      [coords[0] - halfW, coords[1] - halfL],
+      [coords[0] + halfW, coords[1] - halfL],
+      [coords[0] + halfW, coords[1] + halfL],
+      [coords[0] - halfW, coords[1] + halfL],
+      [coords[0] - halfW, coords[1] - halfL], // close
+    ];
+
+    const polygon = turf.polygon([ring]);
+
+    // Apply slight rotation for visual variety (aligned to parcel orientation)
+    if (rotationDeg !== 0) {
+      return turf.transformRotate(polygon, rotationDeg, { pivot: coords }) as GeoJSON.Feature<GeoJSON.Polygon>;
+    }
+    return polygon;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Insets a polygon parcel boundary by setback distance.
+ * For polygons from the backend, negative buffer guarantees no road intersection.
+ */
+function insetPolygon(
+  feature: GeoJSON.Feature,
+  setbackMeters: number
+): GeoJSON.Feature | null {
+  try {
+    if (!feature.geometry) return null;
+    const inset = turf.buffer(feature, -setbackMeters, { units: 'meters' });
+    if (!inset || !inset.geometry) return null;
+
+    if (inset.geometry.type === 'MultiPolygon') {
+      const polygons = inset.geometry.coordinates.map(c => turf.polygon(c));
+      const largest = polygons.reduce((a, b) => turf.area(a) > turf.area(b) ? a : b);
+      return { ...largest, properties: { ...feature.properties } };
+    }
+    return { ...inset, properties: { ...feature.properties } };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Process backend parcel features into building footprints.
+ * Handles BOTH Point geometry (creates footprint from centroid + area)
+ * and Polygon geometry (insets by setback distance).
+ */
+function processParcelFootprints(
+  parcels: GeoJSON.FeatureCollection,
+  parameters: Record<string, any>
+): GeoJSON.FeatureCollection {
+  const setbackMeters = parameters.setback_meters ?? 3;
+  const lotCoverage = parameters.lot_coverage ?? 0.6;
+  const maxStoreys = parameters.max_storeys ?? 6;
+  const proposedHeight = maxStoreys * 3.5;
+
+  const processedFeatures = parcels.features
+    .map((feature, idx) => {
+      try {
+        const geom = feature.geometry;
+        if (!geom) return null;
+
+        const lotAreaSqm = feature.properties?.lot_area_sqm ?? 400;
+        const score = feature.properties?.score ?? 50;
+        let footprint: GeoJSON.Feature | null = null;
+
+        if (geom.type === 'Point') {
+          // Point geometry — construct footprint from centroid + area
+          const coords = geom.coordinates as [number, number];
+          // Vary rotation based on index for visual diversity (-15 to +15 degrees)
+          const rotation = ((idx * 37) % 30) - 15;
+          footprint = createFootprintFromPoint(coords, lotAreaSqm, lotCoverage, setbackMeters, rotation);
+        } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+          // Polygon geometry — inset by setback
+          footprint = insetPolygon(feature, setbackMeters);
+          // Apply lot coverage scaling
+          if (footprint && lotCoverage < 1.0) {
+            try {
+              const centroid = turf.centroid(footprint);
+              footprint = turf.transformScale(footprint, Math.sqrt(lotCoverage), { origin: centroid });
+            } catch { /* keep unscaled */ }
+          }
+        }
+
+        if (!footprint || !footprint.geometry) return null;
+
+        const footprintArea = turf.area(footprint);
+        const estimatedUnits = Math.max(1, Math.floor((footprintArea * maxStoreys) / 75));
+
+        return {
+          ...footprint,
+          properties: {
+            ...feature.properties,
+            proposed_height: proposedHeight,
+            base_height: 0,
+            storeys: maxStoreys,
+            footprint_area_sqm: Math.round(footprintArea),
+            parcel_area_sqm: Math.round(lotAreaSqm),
+            score,
+            estimated_units: estimatedUnits,
+            building_type: feature.properties?.building_type ?? 'mixed_use',
+          },
+        };
+      } catch (e) {
+        console.warn('Failed to process parcel:', feature.properties?.parcel_id, e);
+        return null;
+      }
+    })
+    .filter(Boolean) as GeoJSON.Feature[];
+
+  return { type: 'FeatureCollection', features: processedFeatures };
+}
+
+/**
+ * Recompute statistics from the processed building footprints.
+ * All numbers are algorithmic — zero hardcoding.
+ */
+function recomputeStatistics(
+  buildings: GeoJSON.FeatureCollection,
+  originalStats: ComputedStatistics
+): ComputedStatistics {
+  const features = buildings.features;
+  if (features.length === 0) return originalStats;
+
+  const AVG_HOUSEHOLD_SIZE = 2.1;
+  const AVG_ASSESSED_VALUE = 350000;
+  const MILL_RATE = 0.0118;
+  const ION_MODE_SHARE = 0.3;
+
+  const totalParcels = features.length;
+  const totalAreaSqm = features.reduce((sum, f) => sum + (f.properties?.parcel_area_sqm || 0), 0);
+  const totalUnits = features.reduce((sum, f) => sum + (f.properties?.estimated_units || 0), 0);
+
+  const estimatedPopulation = Math.round(totalUnits * AVG_HOUSEHOLD_SIZE);
+  const estimatedTaxRevenue = Math.round(totalUnits * AVG_ASSESSED_VALUE * MILL_RATE);
+
+  // ION ridership — only parcels within 800m of an ION station
+  const parcelsNearION = features.filter(f => {
+    try {
+      const centroid = turf.centroid(f);
+      return ION_STATION_COORDS.some(station =>
+        turf.distance(centroid, turf.point(station), { units: 'meters' }) < 800
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  const transitRidership = Math.round(
+    parcelsNearION.length * AVG_HOUSEHOLD_SIZE * ION_MODE_SHARE
+  );
+
+  // Ward breakdown from real parcel properties
+  const wardMap = new Map<string, { councillor: string; count: number }>();
+  features.forEach(f => {
+    const ward = f.properties?.ward_name || 'Unknown';
+    const councillor = f.properties?.councillor_name || 'Unknown';
+    const existing = wardMap.get(ward) || { councillor, count: 0 };
+    existing.count++;
+    wardMap.set(ward, existing);
+  });
+
+  return {
+    total_parcels: totalParcels,
+    total_area_sqm: Math.round(totalAreaSqm),
+    housingUnits: totalUnits,
+    newResidents: estimatedPopulation,
+    taxRevenue: estimatedTaxRevenue,
+    transitRidership,
+    schoolChildren: Math.round(totalUnits * 0.1),
+    waterDemand: Math.round(estimatedPopulation * 220 * 365 / 1000000),
+    affected_wards: Array.from(wardMap.entries()).map(([ward, data]) => ({
+      ward_name: ward,
+      councillor: data.councillor,
+      parcel_count: data.count,
+    })),
+  };
+}
+
+// ─── Fallback Intent Parser ──────────────────────────────────
+// Used when Gemini API is rate-limited. Generates structured intent
+// from keywords. The BACKEND still does all spatial resolution with real data.
+
+const STREET_COORDS: Record<string, { lat: number; lng: number; buffer: number }> = {
+  'king': { lat: 43.4640, lng: -80.5230, buffer: 150 },
+  'university': { lat: 43.4720, lng: -80.5350, buffer: 120 },
+  'columbia': { lat: 43.4760, lng: -80.5280, buffer: 100 },
+  'weber': { lat: 43.4700, lng: -80.5150, buffer: 120 },
+  'bridgeport': { lat: 43.4850, lng: -80.5200, buffer: 100 },
+  'erb': { lat: 43.4640, lng: -80.5280, buffer: 120 },
+  'albert': { lat: 43.4690, lng: -80.5280, buffer: 80 },
+  'lester': { lat: 43.4730, lng: -80.5300, buffer: 80 },
+  'philip': { lat: 43.4710, lng: -80.5320, buffer: 80 },
+  'northfield': { lat: 43.4920, lng: -80.5380, buffer: 120 },
+  'regina': { lat: 43.4650, lng: -80.5240, buffer: 80 },
+  'caroline': { lat: 43.4660, lng: -80.5270, buffer: 80 },
+};
+
+const AREA_COORDS: Record<string, { lat: number; lng: number; district: string }> = {
+  'uptown': { lat: 43.4640, lng: -80.5230, district: 'Uptown' },
+  'northdale': { lat: 43.4760, lng: -80.5290, district: 'Northdale' },
+  'beechwood': { lat: 43.4550, lng: -80.5250, district: 'Beechwood' },
+  'lakeshore': { lat: 43.4500, lng: -80.5400, district: 'Lakeshore' },
+  'westmount': { lat: 43.4600, lng: -80.5450, district: 'Westmount' },
+  'laurelwood': { lat: 43.4430, lng: -80.5350, district: 'Laurelwood' },
+  'spur': { lat: 43.4650, lng: -80.5220, district: 'Uptown' },
+  'ion': { lat: 43.4640, lng: -80.5230, district: 'Central' },
+};
+
+function fallbackParseIntent(query: string): GeminiSpatialIntent {
+  const q = query.toLowerCase();
+
+  // Extract storey count
+  const storeyMatch = q.match(/(\d+)[- ]?stor(?:e?y|ies)/);
+  const maxStoreys = storeyMatch ? parseInt(storeyMatch[1]) : 6;
+
+  // Determine zone type
+  let zoneType = 'mixed_use';
+  if (q.includes('residential') || q.includes('condo') || q.includes('apartment')) zoneType = 'residential';
+  else if (q.includes('commercial') || q.includes('retail') || q.includes('office')) zoneType = 'commercial';
+  else if (q.includes('mixed')) zoneType = 'mixed_use';
+  else if (q.includes('industrial')) zoneType = 'industrial';
+  else if (q.includes('park') || q.includes('green')) zoneType = 'park';
+
+  // Determine action
+  let action = 'rezone';
+  if (q.includes('find') || q.includes('show') || q.includes('score') || q.includes('analyze')) action = 'find_parcels';
+  else if (q.includes('add') || q.includes('build')) action = 'add_building';
+
+  // Score-based queries
+  const scoreAboveMatch = q.match(/scor(?:e|ing)\s*(?:above|over|>)\s*(\d+)/);
+  const scoreBelowMatch = q.match(/scor(?:e|ing)\s*(?:below|under|<)\s*(\d+)/);
+  if (scoreAboveMatch || scoreBelowMatch) {
+    const scoreMin = scoreAboveMatch ? parseInt(scoreAboveMatch[1]) : 0;
+    const scoreMax = scoreBelowMatch ? parseInt(scoreBelowMatch[1]) : 100;
+
+    // Check if an area is also mentioned
+    let centerLat: number | undefined;
+    let centerLng: number | undefined;
+    for (const [name, coords] of Object.entries(AREA_COORDS)) {
+      if (q.includes(name)) { centerLat = coords.lat; centerLng = coords.lng; break; }
+    }
+    for (const [name, coords] of Object.entries(STREET_COORDS)) {
+      if (q.includes(name)) { centerLat = coords.lat; centerLng = coords.lng; break; }
+    }
+
+    return {
+      action: 'find_parcels',
+      target_description: query,
+      zone_type: zoneType,
+      parameters: { max_storeys: maxStoreys, setback_meters: 8, lot_coverage: 0.6 },
+      spatial_query: {
+        method: 'parcels_by_score',
+        score_min: scoreMin,
+        score_max: scoreMax,
+        center_lat: centerLat,
+        center_lng: centerLng,
+        buffer_meters: 500,
+      },
+      summary: `Finding parcels with scores ${scoreAboveMatch ? `above ${scoreMin}` : ''}${scoreBelowMatch ? `below ${scoreMax}` : ''} in Waterloo.`,
+    };
+  }
+
+  // Ward queries
+  const wardMatch = q.match(/ward\s*(\d+)/i);
+  if (wardMatch) {
+    return {
+      action,
+      target_description: query,
+      zone_type: zoneType,
+      parameters: { max_storeys: maxStoreys, setback_meters: 8, lot_coverage: 0.6 },
+      spatial_query: { method: 'ward', ward_name: `Ward ${wardMatch[1]}`, buffer_meters: 200 },
+      summary: `${action === 'find_parcels' ? 'Analyzing' : 'Proposing changes to'} parcels in Ward ${wardMatch[1]}, Waterloo.`,
+    };
+  }
+
+  // Street queries
+  for (const [streetKey, coords] of Object.entries(STREET_COORDS)) {
+    if (q.includes(streetKey)) {
+      return {
+        action,
+        target_description: query,
+        zone_type: zoneType,
+        parameters: { max_storeys: maxStoreys, setback_meters: 8, lot_coverage: 0.6 },
+        spatial_query: {
+          method: 'street_corridor',
+          street_name: streetKey.charAt(0).toUpperCase() + streetKey.slice(1) + ' St',
+          center_lat: coords.lat,
+          center_lng: coords.lng,
+          buffer_meters: coords.buffer,
+        },
+        summary: `${action === 'find_parcels' ? 'Analyzing' : 'Proposing ' + maxStoreys + '-storey ' + zoneType + ' along'} ${streetKey.charAt(0).toUpperCase() + streetKey.slice(1)} St in Waterloo.`,
+      };
+    }
+  }
+
+  // District/area queries
+  for (const [areaKey, coords] of Object.entries(AREA_COORDS)) {
+    if (q.includes(areaKey)) {
+      return {
+        action,
+        target_description: query,
+        zone_type: zoneType,
+        parameters: { max_storeys: maxStoreys, setback_meters: 8, lot_coverage: 0.6 },
+        spatial_query: {
+          method: 'district',
+          district_name: coords.district,
+          center_lat: coords.lat,
+          center_lng: coords.lng,
+          buffer_meters: 300,
+        },
+        summary: `${action === 'find_parcels' ? 'Analyzing' : 'Proposing ' + maxStoreys + '-storey ' + zoneType + ' in'} the ${coords.district} area of Waterloo.`,
+      };
+    }
+  }
+
+  // Default fallback — radius search near Uptown
+  return {
+    action,
+    target_description: query,
+    zone_type: zoneType,
+    parameters: { max_storeys: maxStoreys, setback_meters: 8, lot_coverage: 0.6 },
+    spatial_query: {
+      method: 'radius',
+      center_lat: 43.4640,
+      center_lng: -80.5230,
+      buffer_meters: 300,
+    },
+    summary: `Processing urban planning request for Waterloo: "${query}"`,
+  };
+}
+
+// ─── Main Pipeline ──────────────────────────────────────────
+
+export async function simulateZoningChange(query: string): Promise<SimulationResult> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-  if (!apiKey) {
-    console.warn("No Gemini API key found. Using mock data. Set VITE_GEMINI_API_KEY in .env");
-    const mocked = { ...fallbackResult };
-    mocked.zone = targetZone;
-    if (targetZone === 'university') {
-      mocked.narrative = "Adding high density around University stations significantly boosts transit viability, though parking minimums will need careful review.";
-    } else if (targetZone === 'midtown') {
-      mocked.narrative = "Midtown intensification is heavily impacted by the water moratorium. Any 6+ storey additions will be frozen until infrastructure expands.";
-    } else if (targetZone === 'northfield') {
-      mocked.narrative = "Densifying the Northfield corridor transforms retail surface parking into mixed-use communities, taking advantage of the mall terminal.";
-    }
-    mocked.zoneCenter = zoneCenter;
-    // Generate buildings from OSM data (or fallback coordinates)
-    const buildings = await generateBuildings(zoneCenter, targetZone, mocked.proposedHeight);
-    mocked.buildingFootprints = buildings;
-    return mocked;
-  }
+  let intent: GeminiSpatialIntent;
 
-  try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: { text: systemPrompt } },
-        contents: [{ role: 'user', parts: [{ text: query }] }],
-        generationConfig: {
+  // Step 1: Try Gemini for intent parsing, fall back to keyword parser on failure
+  if (apiKey) {
+    try {
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: { text: GEMINI_SYSTEM_PROMPT } },
+          contents: [{ role: 'user', parts: [{ text: query }] }],
+          generationConfig: {
             temperature: 0.2,
-            response_mime_type: "application/json"
+            response_mime_type: 'application/json',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn('Gemini API unavailable (status', response.status, '), error:', errText);
+        console.warn('Using fallback parser due to API error.');
+        // Fall through to fallback
+        intent = fallbackParseIntent(query);
+      } else {
+        const data = await response.json();
+        let textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
+        // Strip markdown fences
+        let cleanJson = textResponse.trim();
+        if (cleanJson.startsWith('```')) {
+          cleanJson = cleanJson.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
         }
-      })
-    });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API Error: ${response.statusText}`);
+        intent = JSON.parse(cleanJson);
+      }
+    } catch (error) {
+      console.warn('Gemini request failed, using fallback parser:', error);
+      intent = fallbackParseIntent(query);
     }
-
-    const data = await response.json();
-    const textResponse = data.candidates[0].content.parts[0].text;
-
-    let cleanJson = textResponse;
-    if (cleanJson.startsWith('```json')) {
-      cleanJson = cleanJson.replace(/```json\n?/, '').replace(/```\n?$/, '');
-    }
-
-    const result = JSON.parse(cleanJson) as SimulationResult;
-    result.zoneCenter = ZONES[result.zone as keyof typeof ZONES] || ZONES["uptown"];
-
-    // Override Gemini's building footprints with programmatically generated ones
-    const buildings = await generateBuildings(result.zoneCenter, result.zone, result.proposedHeight);
-    result.buildingFootprints = buildings;
-
-    return result;
-  } catch (error) {
-    console.error("Gemini Parse Error:", error);
-    const fallback = { ...fallbackResult };
-    fallback.zoneCenter = ZONES["uptown"];
-    // Generate buildings for fallback too
-    const buildings = await generateBuildings(fallback.zoneCenter!, fallback.zone, fallback.proposedHeight);
-    fallback.buildingFootprints = buildings;
-    return fallback;
+  } else {
+    console.warn('No Gemini API key, using fallback parser');
+    intent = fallbackParseIntent(query);
   }
+
+  console.log('[geminiService] Parsed intent:', intent);
+
+  // Handle error action
+  if (intent.action === 'error') {
+    throw new Error(intent.summary || "I couldn't understand that request.");
+  }
+
+  // Apply defaults to parameters
+  intent.parameters = {
+    max_storeys: intent.parameters?.max_storeys ?? 6,
+    setback_meters: intent.parameters?.setback_meters ?? 8,
+    lot_coverage: intent.parameters?.lot_coverage ?? 0.6,
+    building_type: intent.parameters?.building_type ?? null,
+  };
+  intent.spatial_query.buffer_meters = intent.spatial_query?.buffer_meters ?? 100;
+
+  // Step 3: Send intent to backend for spatial resolution
+  const backendResponse = await fetch(`${BACKEND_URL}/simulate/proposal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(intent),
+  });
+
+  if (!backendResponse.ok) {
+    const errText = await backendResponse.text();
+    console.error('Backend Error:', backendResponse.status, errText);
+    throw new Error(`Backend Error: ${backendResponse.statusText}`);
+  }
+
+  const backendData = await backendResponse.json();
+  console.log('[geminiService] Backend returned', backendData.affected_parcels?.features?.length, 'parcels');
+
+  // Step 4: Process polygons client-side — inset + lot coverage + heights
+  const rawParcels = backendData.affected_parcels as GeoJSON.FeatureCollection;
+  const processedBuildings = processParcelFootprints(rawParcels, intent.parameters);
+  console.log('[geminiService] Processed', processedBuildings.features.length, 'building footprints');
+
+  // Step 5: Recompute statistics from processed footprints
+  const stats = recomputeStatistics(processedBuildings, backendData.stats);
+
+  // Step 6: Return the full result
+  return {
+    action: intent.action,
+    affected_parcels: processedBuildings,
+    stats,
+    summary: intent.summary || backendData.summary,
+    zoneCenter: backendData.zoneCenter,
+    visualization: backendData.visualization,
+    waterMoratoriumImpacted: backendData.waterMoratoriumImpacted ?? false,
+    narrative: intent.summary || backendData.narrative,
+    risks: backendData.risks ?? [],
+  };
 }

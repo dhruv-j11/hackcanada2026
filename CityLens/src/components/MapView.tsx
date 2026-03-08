@@ -12,7 +12,7 @@ import { ionLineGeoJSON, ionStationsGeoJSON } from '../data/ionRoute';
 import { fetchParcelScores } from '../services/apiService';
 import type { IonSimulationResult } from '../services/apiService';
 import type { SimulationResult } from '../services/geminiService';
-import circle from '@turf/circle';
+import * as turf from '@turf/turf';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -583,18 +583,9 @@ export default function MapView({
       const m = map.current;
       clearSimulation();
 
-      const features = simulationResult.buildingFootprints.map((b: { height: number; type: string; coordinates: [number, number][] }, i: number) => ({
-        type: 'Feature' as const,
-        properties: { height: b.height, base_height: 0, building_type: b.type, index: i },
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [[...b.coordinates, b.coordinates[0]]]
-        }
-      }));
-
       m.addSource('sim-buildings-source', {
         type: 'geojson',
-        data: { type: 'FeatureCollection' as const, features }
+        data: simulationResult.affected_parcels
       });
 
       m.addLayer({
@@ -604,16 +595,19 @@ export default function MapView({
         slot: SLOT_MIDDLE,
         paint: {
           'fill-extrusion-color': [
-            'match', ['get', 'building_type'],
-            'residential', '#3B82F6',
-            'mixed-use', '#06B6D4',
-            'commercial', '#8B5CF6',
-            '#3B82F6'
+            'interpolate', ['linear'], ['get', 'score'],
+            0, '#9e9e9e',
+            30, '#bdbdbd',
+            31, '#fff176',
+            60, '#fdd835',
+            61, '#ffb74d',
+            80, '#f57c00',
+            81, '#ef5350',
+            100, '#c62828',
           ],
-          'fill-extrusion-height': ['get', 'height'],
-          'fill-extrusion-base': ['get', 'base_height'],
-          'fill-extrusion-opacity': 0.8,
-          'fill-extrusion-vertical-gradient': true,
+          'fill-extrusion-height': ['get', 'proposed_height'],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.85,
           'fill-extrusion-emissive-strength': 0.6
         }
       });
@@ -623,24 +617,33 @@ export default function MapView({
         type: 'line',
         source: 'sim-buildings-source',
         slot: SLOT_MIDDLE,
-        paint: { 'line-color': '#60A5FA', 'line-width': 1.5, 'line-opacity': 0.5, 'line-emissive-strength': 1 }
+        paint: { 'line-color': '#ffffff', 'line-width': 1, 'line-opacity': 0.4, 'line-emissive-strength': 0.8 }
       });
 
-      if (simulationResult.zoneCenter) {
-        const center: [number, number] = [simulationResult.zoneCenter.lng, simulationResult.zoneCenter.lat];
-        const radiusFeature = circle(center, 0.4, { steps: 64, units: 'kilometers' });
-        m.addSource('sim-radius-source', { type: 'geojson', data: radiusFeature });
-        m.addLayer({
-          id: 'sim-radius-fill', source: 'sim-radius-source', type: 'fill', slot: SLOT_MIDDLE,
-          paint: { 'fill-color': '#06B6D4', 'fill-opacity': 0.08 }
-        });
-        m.addLayer({
-          id: 'sim-radius-line', source: 'sim-radius-source', type: 'line', slot: SLOT_MIDDLE,
-          paint: { 'line-color': '#06B6D4', 'line-width': 2, 'line-dasharray': [3, 3], 'line-opacity': 0.4, 'line-emissive-strength': 0.8 }
-        });
-
+      // Fly camera to affected area using bbox of all features
+      if (simulationResult.affected_parcels.features.length > 0) {
+        try {
+          const bbox = turf.bbox(simulationResult.affected_parcels);
+          m.fitBounds(
+            [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
+            { padding: 80, pitch: is3DMode ? 55 : 0, bearing: is3DMode ? -15 : 0, duration: 2000 }
+          );
+        } catch (e) {
+          // Fallback to zoneCenter
+          if (simulationResult.zoneCenter) {
+            m.flyTo({
+              center: [simulationResult.zoneCenter.lng, simulationResult.zoneCenter.lat],
+              zoom: 16,
+              pitch: is3DMode ? 60 : 0,
+              bearing: is3DMode ? -20 : 0,
+              duration: 2000,
+              essential: true
+            });
+          }
+        }
+      } else if (simulationResult.zoneCenter) {
         m.flyTo({
-          center,
+          center: [simulationResult.zoneCenter.lng, simulationResult.zoneCenter.lat],
           zoom: 16,
           pitch: is3DMode ? 60 : 0,
           bearing: is3DMode ? -20 : 0,
