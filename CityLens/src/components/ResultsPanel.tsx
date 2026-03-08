@@ -1,4 +1,4 @@
-import { FileText, ArrowRightLeft, X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle } from 'lucide-react';
 import * as icons from 'lucide-react';
 import type { SimulationResult } from '../services/geminiService';
 
@@ -132,16 +132,7 @@ export default function ResultsPanel({
       </div>
 
       <div className="p-6 border-t border-[#1E3050] bg-[#050A1A]">
-        <div className="flex gap-3 mb-6">
-          <button className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border border-[#3B82F6] text-white text-[14px] font-medium hover:bg-[#3B82F6]/10 transition-colors">
-            <ArrowRightLeft className="w-4 h-4" />
-            Compare
-          </button>
-          <button className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#3B82F6] hover:bg-blue-500 text-white text-[14px] font-medium transition-colors">
-            <FileText className="w-4 h-4" />
-            Export
-          </button>
-        </div>
+
         <div className="text-center">
           <p className="text-[11px] text-[#64748B]">
             Data: Region of Waterloo Open Data · Stats Canada Census 2021
