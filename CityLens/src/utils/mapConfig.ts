@@ -1,9 +1,19 @@
 /**
  * mapConfig.ts — Single source of truth for all Mapbox map configuration.
- * Embeds settings from mapbox_config.json so everything is in one place.
+ *
+ * KEY CHANGE: Switched from dark-v11 (classic style, no built-in 3D buildings)
+ * to Mapbox Standard with lightPreset: 'night' which provides:
+ *   ✓ Native 3D extruded buildings out of the box
+ *   ✓ Dark aesthetic matching dark-v11
+ *   ✓ 3D lighting, shadows, and landmarks
+ *   ✓ Slot-based layer insertion (top / middle / bottom)
+ *
+ * Uses the style JSON "imports" approach so the map loads in night mode
+ * immediately with NO flash of daytime colors.
  */
 
-export const MAPBOX_TOKEN = 'pk.eyJ1IjoianBhdGVsMSIsImEiOiJjbW1mc29lMWowMHB0Mnlwc3Z0ZWFieHl6In0.sAyTPeUJKH7tdizuyQGFZw';
+export const MAPBOX_TOKEN =
+  'pk.eyJ1IjoianBhdGVsMSIsImEiOiJjbW1mc29lMWowMHB0Mnlwc3Z0ZWFieHl6In0.sAyTPeUJKH7tdizuyQGFZw';
 
 // ─── Map Center & Camera ─────────────────────────────
 export const MAP_CENTER: [number, number] = [-80.5204, 43.4643];
@@ -17,10 +27,57 @@ export const INITIAL_VIEW_STATE = {
 
 export const TARGET_VIEW_STATE = { ...INITIAL_VIEW_STATE };
 
-// ─── Style URLs ──────────────────────────────────────
-export const DARK_STYLE = 'mapbox://styles/mapbox/dark-v11';
-export const LIGHT_STYLE = 'mapbox://styles/mapbox/light-v11';
-export const MAP_STYLE = DARK_STYLE;
+// ─── Style Configuration ─────────────────────────────
+// Mapbox Standard with night preset — loaded via style JSON imports
+// so the map starts dark immediately (no flash of daytime).
+//
+// This replaces the old dark-v11 / light-v11 classic styles.
+// Standard includes native 3D buildings, landmarks, and lighting.
+
+export const DARK_STYLE_JSON = {
+  version: 8 as const,
+  imports: [
+    {
+      id: 'basemap',
+      url: 'mapbox://styles/mapbox/standard',
+      config: {
+        lightPreset: 'night',
+        showPointOfInterestLabels: true,
+        showPlaceLabels: true,
+        showRoadLabels: true,
+        showTransitLabels: true,
+      },
+    },
+  ],
+  sources: {},
+  layers: [],
+};
+
+export const LIGHT_STYLE_JSON = {
+  version: 8 as const,
+  imports: [
+    {
+      id: 'basemap',
+      url: 'mapbox://styles/mapbox/standard',
+      config: {
+        lightPreset: 'day',
+        showPointOfInterestLabels: true,
+        showPlaceLabels: true,
+        showRoadLabels: true,
+        showTransitLabels: true,
+      },
+    },
+  ],
+  sources: {},
+  layers: [],
+};
+
+// Default to dark
+export const MAP_STYLE = DARK_STYLE_JSON;
+
+// Keep legacy constants if anything else references them
+export const DARK_STYLE = 'mapbox://styles/mapbox/standard';
+export const LIGHT_STYLE = 'mapbox://styles/mapbox/standard';
 
 // ─── Score Color Ramp (from mapbox_config.json) ──────
 // 4-tier color ramp: Grey → Yellow → Orange → Red
@@ -44,7 +101,7 @@ export const SCORE_HEIGHT_EXPR: unknown[] = [
   100, 80,
 ];
 
-// ─── 3D Building Colors ─────────────────────────────
+// ─── 3D Building Colors (for custom building layers if needed) ──
 export function buildingColor(isLight: boolean) {
   return [
     'interpolate', ['linear'], ['get', 'height'],
@@ -55,80 +112,15 @@ export function buildingColor(isLight: boolean) {
   ] as unknown[];
 }
 
-// ─── 3D Buildings Layer Config ───────────────────────
-// dark-v11 doesn't include a 3D buildings layer by default.
-// We add one manually on style.load using the 'composite' source
-// which contains building height data from Mapbox Streets.
-export const BUILDINGS_3D_CONFIG = {
-  id: '3d-buildings',
-  source: 'composite',
-  sourceLayer: 'building',
-  filter: ['==', 'extrude', 'true'] as unknown[],
-  type: 'fill-extrusion' as const,
-  minzoom: 14,
-  paint: {
-    'fill-extrusion-color': [
-      'interpolate', ['linear'], ['get', 'height'],
-      0, '#0f1d32',
-      50, '#1a2d4a',
-      100, '#243b5c',
-      200, '#2e4a6e',
-    ] as unknown[],
-    'fill-extrusion-height': [
-      'interpolate', ['linear'], ['zoom'],
-      14, 0,
-      14.05, ['get', 'height'],
-    ] as unknown[],
-    'fill-extrusion-base': [
-      'interpolate', ['linear'], ['zoom'],
-      14, 0,
-      14.05, ['get', 'min_height'],
-    ] as unknown[],
-    'fill-extrusion-opacity': 0.7,
-  },
-};
-
-/**
- * Call this inside your map's 'style.load' event handler
- * to add 3D extruded buildings to dark-v11.
- *
- * Usage:
- *   map.on('style.load', () => {
- *     add3DBuildings(map);
- *   });
- */
-export function add3DBuildings(map: mapboxgl.Map) {
-  const layers = map.getStyle().layers;
-  if (!layers) return;
-
-  // Find the first symbol layer so buildings render beneath labels
-  const labelLayerId = layers.find(
-    (layer) => layer.type === 'symbol' && (layer.layout as any)?.['text-field']
-  )?.id;
-
-  // Avoid duplicate layer if style reloads
-  if (map.getLayer(BUILDINGS_3D_CONFIG.id)) return;
-
-  map.addLayer(
-    {
-      id: BUILDINGS_3D_CONFIG.id,
-      source: BUILDINGS_3D_CONFIG.source,
-      'source-layer': BUILDINGS_3D_CONFIG.sourceLayer,
-      filter: BUILDINGS_3D_CONFIG.filter,
-      type: BUILDINGS_3D_CONFIG.type,
-      minzoom: BUILDINGS_3D_CONFIG.minzoom,
-      paint: BUILDINGS_3D_CONFIG.paint,
-    } as any,
-    labelLayerId
-  );
-}
-
 // ─── ION LRT Styling ─────────────────────────────────
+// NOTE: With Mapbox Standard's night preset, line layers need
+// 'line-emissive-strength' to stay bright against the dark lighting.
 export const ION_LINE_COLOR = '#06B6D4';
 export const ION_LINE_WIDTH = 4;
 export const ION_GLOW_WIDTH = 8;
 export const ION_GLOW_OPACITY = 0.3;
 export const ION_STATION_RADIUS = 6;
+export const ION_LINE_EMISSIVE_STRENGTH = 1; // keeps ION line bright in night mode
 
 // ─── Parcel Layer Configuration ─────────────────────
 export const PARCEL_OUTLINE_COLOR = '#333333';
@@ -136,6 +128,13 @@ export const PARCEL_OUTLINE_WIDTH = 0.5;
 export const PARCEL_OUTLINE_OPACITY = 0.4;
 export const PARCEL_3D_OPACITY = 0.85;
 export const PARCEL_FLAT_OPACITY = 0.7;
+
+// ─── Standard Style Slots ────────────────────────────
+// Mapbox Standard uses slots instead of beforeId for layer ordering.
+// Use these when calling map.addLayer({ ..., slot: SLOT_MIDDLE })
+export const SLOT_BOTTOM = 'bottom'; // below everything (terrain overlays)
+export const SLOT_MIDDLE = 'middle'; // between buildings and labels (best for data layers)
+export const SLOT_TOP = 'top';       // above everything (UI overlays)
 
 // ─── Score Legend (from mapbox_config.json) ───────────
 export const SCORE_LEGEND = [

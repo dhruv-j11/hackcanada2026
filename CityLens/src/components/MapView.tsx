@@ -2,9 +2,9 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
-  MAPBOX_TOKEN, INITIAL_VIEW_STATE, DARK_STYLE, LIGHT_STYLE,
-  SCORE_COLOR_RAMP, SCORE_HEIGHT_EXPR,
-  ION_LINE_COLOR, ION_LINE_WIDTH, ION_GLOW_WIDTH, ION_GLOW_OPACITY, ION_STATION_RADIUS,
+  MAPBOX_TOKEN, INITIAL_VIEW_STATE, MAP_STYLE,
+  SCORE_COLOR_RAMP, SCORE_HEIGHT_EXPR, SLOT_MIDDLE, SLOT_TOP,
+  ION_LINE_COLOR, ION_LINE_WIDTH, ION_GLOW_WIDTH, ION_GLOW_OPACITY, ION_STATION_RADIUS, ION_LINE_EMISSIVE_STRENGTH,
   PARCEL_OUTLINE_COLOR, PARCEL_OUTLINE_WIDTH, PARCEL_OUTLINE_OPACITY,
   PARCEL_3D_OPACITY, PARCEL_FLAT_OPACITY,
 } from '../utils/mapConfig';
@@ -12,7 +12,6 @@ import { ionLineGeoJSON, ionStationsGeoJSON } from '../data/ionRoute';
 import { fetchParcelScores } from '../services/apiService';
 import type { IonSimulationResult } from '../services/apiService';
 import type { SimulationResult } from '../services/geminiService';
-import { add3DBuildings } from '../utils/mapConfig';
 import circle from '@turf/circle';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -71,7 +70,7 @@ export default function MapView({
 
     const m = new mapboxgl.Map({
       container: mapContainer.current,
-      style: isLightModeRef.current ? LIGHT_STYLE : DARK_STYLE,
+      style: MAP_STYLE as mapboxgl.StyleSpecification,
       ...INITIAL_VIEW_STATE,
       antialias: true
     });
@@ -85,43 +84,41 @@ export default function MapView({
     function addAllCustomLayers() {
       const light = isLightModeRef.current;
 
-      // ── 1. 3D Mapbox buildings (from composite source) ──
-      add3DBuildings(m);
-
-      // ── 2. ION LRT line ──
+      // ── 1. ION LRT line ──
       if (!m.getSource('ion-route')) {
         m.addSource('ion-route', { type: 'geojson', data: ionLineGeoJSON });
       }
       if (!m.getLayer('ion-line-glow')) {
         m.addLayer({
-          id: 'ion-line-glow', type: 'line', source: 'ion-route',
-          paint: { 'line-color': ION_LINE_COLOR, 'line-width': ION_GLOW_WIDTH, 'line-opacity': ION_GLOW_OPACITY }
+          id: 'ion-line-glow', type: 'line', source: 'ion-route', slot: SLOT_MIDDLE,
+          paint: { 'line-color': ION_LINE_COLOR, 'line-width': ION_GLOW_WIDTH, 'line-opacity': ION_GLOW_OPACITY, 'line-emissive-strength': ION_LINE_EMISSIVE_STRENGTH }
         });
       }
       if (!m.getLayer('ion-line-main')) {
         m.addLayer({
-          id: 'ion-line-main', type: 'line', source: 'ion-route',
-          paint: { 'line-color': ION_LINE_COLOR, 'line-width': ION_LINE_WIDTH }
+          id: 'ion-line-main', type: 'line', source: 'ion-route', slot: SLOT_MIDDLE,
+          paint: { 'line-color': ION_LINE_COLOR, 'line-width': ION_LINE_WIDTH, 'line-emissive-strength': ION_LINE_EMISSIVE_STRENGTH }
         });
       }
 
-      // ── 3. ION Stations ──
+      // ── 2. ION Stations ──
       if (!m.getSource('ion-stations')) {
         m.addSource('ion-stations', { type: 'geojson', data: ionStationsGeoJSON });
       }
       if (!m.getLayer('ion-station-points')) {
         m.addLayer({
-          id: 'ion-station-points', type: 'circle', source: 'ion-stations',
+          id: 'ion-station-points', type: 'circle', source: 'ion-stations', slot: SLOT_MIDDLE,
           paint: {
             'circle-radius': ION_STATION_RADIUS,
             'circle-color': ION_LINE_COLOR,
             'circle-stroke-width': 1.5,
-            'circle-stroke-color': light ? '#000000' : '#FFFFFF'
+            'circle-stroke-color': light ? '#000000' : '#FFFFFF',
+            'circle-emissive-strength': ION_LINE_EMISSIVE_STRENGTH
           }
         });
       }
 
-      // ── 4. Load parcel scores (async) ──
+      // ── 3. Load parcel scores (async) ──
       loadParcelScoresForMap(m);
     }
 
@@ -246,11 +243,11 @@ export default function MapView({
             data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [rectCoords] } }
           });
           m.addLayer({
-            id: 'draw-rect-fill', type: 'fill', source: 'draw-rect',
+            id: 'draw-rect-fill', type: 'fill', source: 'draw-rect', slot: SLOT_MIDDLE,
             paint: { 'fill-color': '#3B82F6', 'fill-opacity': 0.1 }
           });
           m.addLayer({
-            id: 'draw-rect-line', type: 'line', source: 'draw-rect',
+            id: 'draw-rect-line', type: 'line', source: 'draw-rect', slot: SLOT_MIDDLE,
             paint: { 'line-color': '#3B82F6', 'line-width': 2, 'line-dasharray': [3, 3] }
           });
         }
@@ -276,11 +273,13 @@ export default function MapView({
           id: 'parcel-scores-3d',
           type: 'fill-extrusion',
           source: 'parcel-scores',
+          slot: SLOT_MIDDLE,
           paint: {
             'fill-extrusion-color': SCORE_COLOR_RAMP as any,
             'fill-extrusion-height': SCORE_HEIGHT_EXPR as any,
             'fill-extrusion-base': 0,
             'fill-extrusion-opacity': PARCEL_3D_OPACITY,
+            'fill-extrusion-emissive-strength': 0.5,
           }
         });
 
@@ -288,6 +287,7 @@ export default function MapView({
           id: 'parcel-scores-flat',
           type: 'fill',
           source: 'parcel-scores',
+          slot: SLOT_MIDDLE,
           layout: { visibility: 'none' },
           paint: {
             'fill-color': SCORE_COLOR_RAMP as any,
@@ -300,6 +300,7 @@ export default function MapView({
           id: 'parcel-outlines',
           type: 'line',
           source: 'parcel-scores',
+          slot: SLOT_MIDDLE,
           paint: {
             'line-color': PARCEL_OUTLINE_COLOR,
             'line-width': PARCEL_OUTLINE_WIDTH,
@@ -311,6 +312,7 @@ export default function MapView({
           id: 'parcel-hover',
           type: 'fill-extrusion',
           source: 'parcel-scores',
+          slot: SLOT_MIDDLE,
           filter: ['==', ['get', 'parcel_id'], ''],
           paint: {
             'fill-extrusion-color': '#ffffff',
@@ -320,6 +322,7 @@ export default function MapView({
             ] as any,
             'fill-extrusion-base': 0,
             'fill-extrusion-opacity': 0.25,
+            'fill-extrusion-emissive-strength': 0.8,
           }
         });
 
@@ -328,10 +331,12 @@ export default function MapView({
           type: 'line',
           source: 'parcel-scores',
           filter: ['==', ['get', 'parcel_id'], ''],
+          slot: SLOT_MIDDLE,
           paint: {
             'line-color': '#06B6D4',
             'line-width': 3,
             'line-opacity': 0.9,
+            'line-emissive-strength': ION_LINE_EMISSIVE_STRENGTH,
           }
         });
 
@@ -339,6 +344,7 @@ export default function MapView({
           id: 'parcel-score-labels',
           type: 'symbol',
           source: 'parcel-scores',
+          slot: SLOT_TOP,
           minzoom: 16,
           layout: {
             'text-field': ['concat', ['to-string', ['round', ['get', 'score']]], '/100'],
@@ -361,7 +367,11 @@ export default function MapView({
   // ─── STYLE SWITCH ─────────────────────────────────────
   useEffect(() => {
     if (!map.current || !mapReady) return;
-    map.current.setStyle(isLightMode ? LIGHT_STYLE : DARK_STYLE);
+    try {
+      map.current.setConfigProperty('basemap', 'lightPreset', isLightMode ? 'day' : 'night');
+    } catch (e) {
+      console.warn('Could not set light preset', e);
+    }
   }, [isLightMode, mapReady]);
 
   // ─── 3D/2D TOGGLE ─────────────────────────────────────
@@ -386,8 +396,10 @@ export default function MapView({
   useEffect(() => {
     if (!map.current || !mapReady) return;
     try {
-      const bVis = visibleLayers.buildings ? 'visible' : 'none';
-      if (map.current.getLayer('3d-buildings')) map.current.setLayoutProperty('3d-buildings', 'visibility', bVis);
+      try {
+        map.current.setConfigProperty('basemap', 'show3dObjects', visibleLayers.buildings);
+      } catch (e) {}
+
       const lVis = visibleLayers.ionLine ? 'visible' : 'none';
       if (map.current.getLayer('ion-line-glow')) map.current.setLayoutProperty('ion-line-glow', 'visibility', lVis);
       if (map.current.getLayer('ion-line-main')) map.current.setLayoutProperty('ion-line-main', 'visibility', lVis);
@@ -427,6 +439,7 @@ export default function MapView({
         id: 'sim-ion-delta-3d',
         type: 'fill-extrusion',
         source: 'sim-ion-delta',
+        slot: SLOT_MIDDLE,
         paint: {
           'fill-extrusion-color': [
             'interpolate', ['linear'], ['get', 'score_delta'],
@@ -437,7 +450,8 @@ export default function MapView({
             0, 2, 10, 30, 30, 80
           ],
           'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.7
+          'fill-extrusion-opacity': 0.7,
+          'fill-extrusion-emissive-strength': 0.8
         }
       });
     }
@@ -478,6 +492,7 @@ export default function MapView({
         id: 'sim-buildings',
         type: 'fill-extrusion',
         source: 'sim-buildings-source',
+        slot: SLOT_MIDDLE,
         paint: {
           'fill-extrusion-color': [
             'match', ['get', 'building_type'],
@@ -489,7 +504,8 @@ export default function MapView({
           'fill-extrusion-height': ['get', 'height'],
           'fill-extrusion-base': ['get', 'base_height'],
           'fill-extrusion-opacity': 0.8,
-          'fill-extrusion-vertical-gradient': true
+          'fill-extrusion-vertical-gradient': true,
+          'fill-extrusion-emissive-strength': 0.6
         }
       });
 
@@ -497,7 +513,8 @@ export default function MapView({
         id: 'sim-buildings-glow',
         type: 'line',
         source: 'sim-buildings-source',
-        paint: { 'line-color': '#60A5FA', 'line-width': 1.5, 'line-opacity': 0.5 }
+        slot: SLOT_MIDDLE,
+        paint: { 'line-color': '#60A5FA', 'line-width': 1.5, 'line-opacity': 0.5, 'line-emissive-strength': 1 }
       });
 
       if (simulationResult.zoneCenter) {
@@ -505,12 +522,12 @@ export default function MapView({
         const radiusFeature = circle(center, 0.4, { steps: 64, units: 'kilometers' });
         m.addSource('sim-radius-source', { type: 'geojson', data: radiusFeature });
         m.addLayer({
-          id: 'sim-radius-fill', source: 'sim-radius-source', type: 'fill',
+          id: 'sim-radius-fill', source: 'sim-radius-source', type: 'fill', slot: SLOT_MIDDLE,
           paint: { 'fill-color': '#06B6D4', 'fill-opacity': 0.08 }
         });
         m.addLayer({
-          id: 'sim-radius-line', source: 'sim-radius-source', type: 'line',
-          paint: { 'line-color': '#06B6D4', 'line-width': 2, 'line-dasharray': [3, 3], 'line-opacity': 0.4 }
+          id: 'sim-radius-line', source: 'sim-radius-source', type: 'line', slot: SLOT_MIDDLE,
+          paint: { 'line-color': '#06B6D4', 'line-width': 2, 'line-dasharray': [3, 3], 'line-opacity': 0.4, 'line-emissive-strength': 0.8 }
         });
 
         m.flyTo({

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import { useScrollReveal, useCountUp, useTypingAnimation } from '../hooks/useAnimations';
+import { useScrollReveal, useTypingAnimation } from '../hooks/useAnimations';
 import { 
-  Building2,
   Sparkles, ArrowRight, Play, X
 } from 'lucide-react';
 
