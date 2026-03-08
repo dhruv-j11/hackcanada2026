@@ -266,10 +266,25 @@ export async function createAreaBrief(data: { bbox?: number[]; parcel_ids?: stri
 
 /** Simulate a hypothetical new ION station */
 export async function simulateIonStation(latitude: number, longitude: number): Promise<IonSimulationResult> {
-  return apiFetch<IonSimulationResult>('/simulate/ion-station', {
+  // The API returns { geojson: { type, features }, avg_score_before, avg_score_after, tier_changes, top_20_most_improved, ... }
+  // We reshape it into the IonSimulationResult expected by the frontend
+  const raw = await apiFetch<Record<string, unknown>>('/simulate/ion-station', {
     method: 'POST',
     body: JSON.stringify({ latitude, longitude }),
   });
+
+  const geojson = raw.geojson as { type: string; features: IonSimulationResult['features'] } | undefined;
+
+  return {
+    type: 'FeatureCollection',
+    features: geojson?.features ?? [],
+    summary: {
+      tier_changes: raw.tier_changes as Record<string, number>,
+      top_20_most_improved: raw.top_20_most_improved as IonSimulationResult['summary'] extends { top_20_most_improved: infer T } ? T : never,
+      avg_score_before: raw.avg_score_before as number,
+      avg_score_after: raw.avg_score_after as number,
+    },
+  };
 }
 
 /** AI-powered impact analysis for a parcel */
